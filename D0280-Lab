@@ -1884,3 +1884,107 @@ NAME                     READY   STATUS        RESTARTS   AGE
 mysql-59db547cdb-hx48f   1/1     Running       0          12s
 mysql-786bb947f9-j97hg   0/1     Terminating   3          63s
 [student@workstation ~]$ 
+
+[student@workstation ~]$ oc new-app --name wordpress --docker-image quay.io/redhattraining/wordpress:5.3.0 -e WORDPRESS_DB_HOST=mysql -e WORDPRESS_DB_NAME=wordpress
+--> Found container image ee025cb (20 months old) from quay.io for "quay.io/redhattraining/wordpress:5.3.0"
+
+    * An image stream tag will be created as "wordpress:5.3.0" that will track this image
+
+--> Creating resources ...
+    imagestream.image.openshift.io "wordpress" created
+    deployment.apps "wordpress" created
+    service "wordpress" created
+--> Success
+    Application is not exposed. You can expose services to the outside world by executing one or more of the commands below:
+     'oc expose svc/wordpress' 
+    Run 'oc status' to view your app.
+[student@workstation ~]$ oc set env deployment/wordpress --prefix WORDPRESS_DB_ --from secret/review-secret
+deployment.apps/wordpress updated
+[student@workstation ~]$ watch oc get pods -l deployment=wordpress
+[student@workstation ~]$  oc get pods -l deployment=wordpress
+NAME                         READY   STATUS    RESTARTS   AGE
+wordpress-77d47b957c-bpww7   0/1     Error     0          23s
+wordpress-fb55dcc77-gqshq    1/1     Running   1          55s
+[student@workstation ~]$  oc get pods -l deployment=wordpress
+NAME                         READY   STATUS        RESTARTS   AGE
+wordpress-77d47b957c-bpww7   0/1     Error         2          46s
+wordpress-fb55dcc77-gqshq    1/1     Terminating   1          78s
+[student@workstation ~]$  oc get pods -l deployment=wordpress
+NAME                         READY   STATUS    RESTARTS   AGE
+wordpress-77d47b957c-bpww7   1/1     Running   3          70s
+[student@workstation ~]$  oc get pods -l deployment=wordpress
+NAME                         READY   STATUS   RESTARTS   AGE
+wordpress-77d47b957c-bpww7   0/1     Error    4          2m
+[student@workstation ~]$ oc logs wordpress-77d47b957c-bpww7 | tail
+AH00558: apache2: Could not reliably determine the server's fully qualified domain name, using 10.10.0.37. Set the 'ServerName' directive globally to suppress this message
+(13)Permission denied: AH00072: make_sock: could not bind to address [::]:80
+(13)Permission denied: AH00072: make_sock: could not bind to address 0.0.0.0:80
+no listening sockets available, shutting down
+AH00015: Unable to open logs
+[student@workstation ~]$ oc login -u admin -p redhat
+Login successful.
+
+You have access to 59 projects, the list has been suppressed. You can list all projects with 'oc projects'
+
+Using project "authorization-review".
+[student@workstation ~]$ oc get pods/wordpress-77d47b957c-bpww7 -o yaml | oc adm policy scc-subject-review -f -
+RESOURCE                         ALLOWED BY   
+Pod/wordpress-77d47b957c-bpww7   anyuid       
+[student@workstation ~]$ oc create serviceaccount wordpress-sa
+serviceaccount/wordpress-sa created
+[student@workstation ~]$ oc adm policy add-scc-to-user anyuid -z wordpress-sa
+clusterrole.rbac.authorization.k8s.io/system:openshift:scc:anyuid added: "wordpress-sa"
+[student@workstation ~]$ oc set serviceaccount deployment/wordpress wordpress-sa
+deployment.apps/wordpress serviceaccount updated
+[student@workstation ~]$ oc get pods -l deployment=wordpress
+NAME                         READY   STATUS        RESTARTS   AGE
+wordpress-77d47b957c-bpww7   0/1     Terminating   5          5m15s
+wordpress-b4869674f-bcxwq    1/1     Running       0          13s
+[student@workstation ~]$ oc expose service/wordpress --hostname wordpress-review.apps.ocp4.example.com
+route.route.openshift.io/wordpress exposed
+[student@workstation ~]$ curl -s http://wordpress-review.apps.ocp4.example.com/wp-admin/install.php | grep Installation
+	<title>WordPress &rsaquo; Installation</title>
+[student@workstation ~]$ lab authorization-review grade
+
+Grading the student's work for Lab: Configuring Application Security
+
+ Verifying the information collected about the cluster:
+ · The 'authorization-review' project exists...................  PASS
+ · The 'review-secret' secret exists...........................  PASS
+ · The 'mysql' application exists..............................  PASS
+ · The 'MYSQL_USER' environment variable is set from the 'revie
+   w-secret' secret............................................  PASS
+ · The 'MYSQL_PASSWORD' environment variable is set from the 'r
+   eview-secret' secret........................................  PASS
+ · The 'MYSQL_DATABASE' environment variable is set from the 'r
+   eview-secret' secret........................................  PASS
+ · The 'wordpress' application exists..........................  PASS
+ · The 'WORDPRESS_DB_USER' environment variable is set from the
+   'review-secret' secret......................................  PASS
+ · The 'WORDPRESS_DB_PASSWORD' environment variable is set from
+   the 'review-secret' secret..................................  PASS
+ · The 'WORDPRESS_DB_DATABASE' environment variable is set from
+   the 'review-secret' secret..................................  PASS
+ · The 'wordpress-sa' service account exists...................  PASS
+ · The 'wordpress-sa' service account uses the 'anyuid' SCC....  PASS
+ · The 'wordpress' application uses the 'wordpress-sa' service 
+   account.....................................................  PASS
+ · The 'wordpress' application uses the 'anyuid' SCC...........  PASS
+ · The 'wordpress' deployment is exposed at 'wordpress-review.a
+   pps.ocp4.example.com'.......................................  PASS
+ · The 'wordpress-review.apps.ocp4.example.com' URL responds to
+   external requests...........................................  PASS
+
+Overall exercise grade.........................................  PASS
+
+[student@workstation ~]$ 
+
+Summary
+In this chapter, you learned:
+• Secret resources allow you to separate sensitive information from application pods. You expose
+secrets to an application pod either as environment variables or as ordinary files.
+• OpenShift uses security context constraints (SCCs) to define allowed pod interactions with
+system resources. By default, pods operate under the restricted context which limits access
+to node resources.
+
+------------------------------------------------------------------------------------------------------------------------------------
