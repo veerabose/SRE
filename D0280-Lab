@@ -1688,5 +1688,127 @@ Please use start if you wish to do the exercise again.
 
 [student@workstation ~]$ 
 
+--------------------------------------------------------------------------------------------------------------
+Chapter 4 | Configuring Application Security
+Guided Exercise
+Controlling Application Permissions with Security Context Constraints Page 104
+--------------------------------------------------------------------------------------------------------------
+In this exercise, you will deploy applications that require pods with extended permissions.
+Outcomes
+You should be able to:
+• Create service accounts and assign security context constraints (SCCs) to them.
+• Assign a service account to a deployment configuration.
+• Run applications that need root privileges.
+[student@workstation ~]$ lab authorization-scc start
+
+Checking prerequisites for Guided Exercise: Controlling Application Permissions with Security Context Constraints
+
+ Verify the OpenShift cluster is running:
+ · Router pods are available...................................  SUCCESS
+ · OAuth pods are available....................................  SUCCESS
+ · API pods are available......................................  SUCCESS
+ · Control plane node 'master01' is ready......................  SUCCESS
+ · Control plane node 'master02' is ready......................  SUCCESS
+ · Control plane node 'master03' is ready......................  SUCCESS
+ Checking for conflicts with existing OpenShift projects:
+ · The 'authorization-scc' project is absent...................  SUCCESS
+
+Setting up the classroom for Guided Exercise: Controlling Application Permissions with Security Context Constraints
+
+ · Validate 'admin' can log in with password 'redhat'..........  SUCCESS
+ · Validate 'leader' can log in with password 'redhat'.........  SUCCESS
+ · Validate 'developer' can log in with password 'developer'...  SUCCESS
+
+Overall start status...........................................  SUCCESS
+
+[student@workstation ~]$ oc login -u developer -p developer https://api.ocp4.example.com:6443
+Login successful.
+
+You don't have any projects. You can try to create a new project, by running
+
+    oc new-project <projectname>
+
+[student@workstation ~]$ oc new-project authorization-scc
+Now using project "authorization-scc" on server "https://api.ocp4.example.com:6443".
+
+You can add applications to this project with the 'new-app' command. For example, try:
+
+    oc new-app ruby~https://github.com/sclorg/ruby-ex.git
+
+to build a new example application in Ruby. Or use kubectl to deploy a simple Kubernetes application:
+
+    kubectl create deployment hello-node --image=gcr.io/hello-minikube-zero-install/hello-node
+
+[student@workstation ~]$ oc new-app --name gitlab --docker-image quay.io/redhattraining/gitlab-ce:8.4.3-ce.0
+--> Found container image a26371b (5 years old) from quay.io for "quay.io/redhattraining/gitlab-ce:8.4.3-ce.0"
+
+    * An image stream tag will be created as "gitlab:8.4.3-ce.0" that will track this image
+
+--> Creating resources ...
+    imagestream.image.openshift.io "gitlab" created
+    deployment.apps "gitlab" created
+    service "gitlab" created
+--> Success
+    Application is not exposed. You can expose services to the outside world by executing one or more of the commands below:
+     'oc expose svc/gitlab' 
+    Run 'oc status' to view your app.
+[student@workstation ~]$ oc get pods
+NAME                      READY   STATUS   RESTARTS   AGE
+gitlab-76fb75db89-wd4vh   0/1     Error    2          40s
+[student@workstation ~]$ oc logs pods/gitlab-76fb75db89-wd4vh |tail
+ 37:  node.consume_attributes(Gitlab.generate_config(node['fqdn']))
+ 38:  
+ 39:  if File.exists?("/var/opt/gitlab/bootstrapped")
+ 40:  	node.set['gitlab']['bootstrap']['enable'] = false
+
+[2021-08-08T06:07:34+00:00] ERROR: Running exception handlers
+[2021-08-08T06:07:34+00:00] ERROR: Exception handlers complete
+[2021-08-08T06:07:34+00:00] FATAL: Stacktrace dumped to /opt/gitlab/embedded/cookbooks/cache/chef-stacktrace.out
+[2021-08-08T06:07:34+00:00] ERROR: directory[/etc/gitlab] (gitlab::default line 26) had an error: Chef::Exceptions::InsufficientPermissions: Cannot create directory[/etc/gitlab] at /etc/gitlab due to insufficient permissions
+[2021-08-08T06:07:34+00:00] FATAL: Chef::Exceptions::ChildConvergeError: Chef run process exited unsuccessfully (exit code 1)
+[student@workstation ~]$ oc login -u admin -p redhat
+Login successful.
+
+You have access to 59 projects, the list has been suppressed. You can list all projects with 'oc projects'
+
+Using project "authorization-scc".
+[student@workstation ~]$ oc get pods/gitlab-76fb75db89-wd4vh -o yaml |oc adm policy scc-subject-review -f -
+RESOURCE                      ALLOWED BY   
+Pod/gitlab-76fb75db89-wd4vh   anyuid       
+[student@workstation ~]$ oc create sa gitlab-sa
+serviceaccount/gitlab-sa created
+[student@workstation ~]$ oc adm policy add-scc-to-user anyuid -z gitlab-sa
+clusterrole.rbac.authorization.k8s.io/system:openshift:scc:anyuid added: "gitlab-sa"
+[student@workstation ~]$ oc login -u developer -p developer
+Login successful.
+
+You have one project on this server: "authorization-scc"
+
+Using project "authorization-scc".
+[student@workstation ~]$ oc set serviceaccount deployment/gitlab gitlab-sa
+deployment.apps/gitlab serviceaccount updated
+[student@workstation ~]$ oc get pods
+NAME                      READY   STATUS              RESTARTS   AGE
+gitlab-6dd7bff495-n7tph   0/1     ContainerCreating   0          8s
+gitlab-76fb75db89-wd4vh   0/1     CrashLoopBackOff    4          3m13s
+[student@workstation ~]$ oc expose service/gitlab --port 80 --hostname gitlab.apps.ocp4.example.com
+route.route.openshift.io/gitlab exposed
+[student@workstation ~]$ oc get routes
+NAME     HOST/PORT                      PATH   SERVICES   PORT   TERMINATION   WILDCARD
+gitlab   gitlab.apps.ocp4.example.com          gitlab     80                   None
+[student@workstation ~]$ curl -s http://gitlab.apps.ocp4.example.com/users/sign_in | grep '<title>'
+<title>Sign in · GitLab</title>
+[student@workstation ~]$ oc delete project authorization-scc
+project.project.openshift.io "authorization-scc" deleted
+[student@workstation ~]$ lab authorization-scc finish
+
+Completing Guided Exercise: Controlling Application Permissions with Security Context Constraints
+
+
+Please use start if you wish to do the exercise again.
+
+[student@workstation ~]$ 
+
+
 
 
