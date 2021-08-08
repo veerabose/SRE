@@ -728,6 +728,80 @@ containers, the main exceptions are the CRI-O container engine and the Kubelet.
 • The oc get node, oc adm top, oc adm node-logs, and oc adm debug commands
 provide troubleshooting information about OpenShift nodes.
 
+
+Therory
+---------
+Managing RBAC Using the CLI
+Cluster administrators can use the oc adm policy command to both add and remove cluster
+roles and namespace roles.
+
+To add a cluster role to a user, use the add-cluster-role-to-user subcommand:
+[user@demo ~]$ oc adm policy add-cluster-role-to-user cluster-role username
+
+For example, to change a regular user to a cluster administrator, use the following command:
+[user@demo ~]$ oc adm policy add-cluster-role-to-user cluster-admin username
+
+To remove a cluster role from a user, use the remove-cluster-role-from-user
+subcommand:
+[user@demo ~]$ oc adm policy remove-cluster-role-from-user cluster-role username
+
+For example, to change a cluster administrator to a regular user, use the following command:
+[user@demo ~]$ oc adm policy remove-cluster-role-from-user cluster-admin username
+
+Rules are defined by an action and a resource. For example, the create user rule is part of the
+cluster-admin role.
+You can use the oc adm policy who-can command to determine if a user can execute an
+action on a resource. For example:
+[user@demo ~]$ oc adm policy who-can delete user
+
+Default roles                                       Description
+admin 				       Users with this role can manage all project resources, including granting
+				             access to other users to access the project.
+                 
+basic-user			    Users with this role have read access to the project.
+
+cluster-admin 			Users with this role have superuser access to the cluster resources. These
+				             users can perform any action on the cluster, and have full control of all
+				              projects.
+cluster-status 			Users with this role can get cluster status information.
+
+edit Users			 with this role can create, change, and delete common application
+				          resources from the project, such as services and deployment
+				          configurations. These users cannot act on management resources such
+				          as limit ranges and quotas, and cannot manage access permissions to the
+			          	project.
+self-provisioner 		Users with this role can create new projects. This is a cluster role, not a
+				              project role.
+view 				Users with this role can view project resources, but cannot modify project
+				resources.
+
+User Types
+Interaction with OpenShift Container Platform is associated with a user. An OpenShift Container
+Platform user object represents a user who can be granted permissions in the system by adding
+roles to that user or to a user's group via rolebindings.
+
+Regular users
+This is the way most interactive OpenShift Container Platform users are represented. Regular
+users are represented with the User object. This type of user represents a person that has
+been allowed access to the platform. Examples of regular users include user1 and user2.
+
+System users
+Many of these are created automatically when the infrastructure is defined, mainly for
+the purpose of enabling the infrastructure to securely interact with the API. System users
+include a cluster administrator (with access to everything), a per-node user, users for
+routers and registries to use, and various others. An anonymous system user is used by
+default for unauthenticated requests. Examples of system users include: system:admin,
+system:openshift-registry, and system:node:node1.example.com.
+
+Service accounts
+These are special system users associated with projects; some are created automatically
+when the project is first created, and project administrators can create more for the
+purpose of defining access to the contents of each project. Service accounts are
+often used to give extra privileges to pods or deployment configurations. Service
+accounts are represented with the ServiceAccount object. Examples of service
+account users include system:serviceaccount:default:deployer and
+system:serviceaccount:foo:builder.
+
 ------------------------------------------------------------------------------------------------------------
 Chapter 3 | Configuring Authentication and Authorization
 Guided Exercise
