@@ -1988,3 +1988,129 @@ system resources. By default, pods operate under the restricted context which li
 to node resources.
 
 ------------------------------------------------------------------------------------------------------------------------------------
+[student@workstation ~]$ lab network-sdn start
+
+Checking prerequisites for Guided Exercise: Troubleshooting OpenShift Software-Defined Networking
+
+ Verify the OpenShift cluster is running:
+ · Router pods are available...................................  SUCCESS
+ · OAuth pods are available....................................  SUCCESS
+ · API pods are available......................................  SUCCESS
+ · Control plane node 'master01' is ready......................  SUCCESS
+ · Control plane node 'master02' is ready......................  SUCCESS
+ · Control plane node 'master03' is ready......................  SUCCESS
+ Checking for conflicts with existing OpenShift projects:
+ · The 'network-sdn' project is absent.........................  SUCCESS
+
+Setting up the classroom for Guided Exercise: Troubleshooting OpenShift Software-Defined Networking
+
+ · Validate 'admin' can log in with password 'redhat'..........  SUCCESS
+ · Validate 'leader' can log in with password 'redhat'.........  SUCCESS
+ · Validate 'developer' can log in with password 'developer'...  SUCCESS
+ Preparing the student's workstation:
+ · Download exercise files.....................................  SUCCESS
+ · Download solution files.....................................  SUCCESS
+
+Overall start status...........................................  SUCCESS
+
+[student@workstation ~]$ source /usr/local/etc/ocp4.config
+[student@workstation ~]$ oc login -u developer -p developer https://api.ocp4.example.com:6443
+Login successful.
+
+You have one project on this server: "authorization-review"
+
+Using project "authorization-review".
+[student@workstation ~]$ oc new-project network-sdn
+Now using project "network-sdn" on server "https://api.ocp4.example.com:6443".
+
+You can add applications to this project with the 'new-app' command. For example, try:
+
+    oc new-app ruby~https://github.com/sclorg/ruby-ex.git
+to build a new example application in Ruby. Or use kubectl to deploy a simple Kubernetes application:
+
+    kubectl create deployment hello-node --image=gcr.io/hello-minikube-zero-install/hello-node
+
+[student@workstation ~]$ cd ~/DO280/labs/network-sdn
+[student@workstation network-sdn]$ cat todo-db.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql
+  labels:
+    app: todonodejs
+    name: mysql
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: todonodejs
+      name: mysql
+  template:
+    metadata:
+      labels:
+        app: todonodejs
+        name: mysql
+    spec:
+      containers:
+      - image: registry.access.redhat.com/rhscl/mysql-57-rhel7:5.7-47
+        name: mysql
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          value: r00tpa55
+        - name: MYSQL_USER
+          value: user1
+        - name: MYSQL_PASSWORD
+          value: mypa55
+        - name: MYSQL_DATABASE
+	  value: items
+        ports:
+        - containerPort: 3306
+          name: mysql
+        volumeMounts:
+        - mountPath: "/var/lib/mysql"
+          name: db-volume
+      volumes:
+      - name: db-volume
+        emptyDir: {}
+      - name: db-init
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: todonodejs
+    name: mysql
+  name: mysql
+spec:
+  ports:
+  - port: 3306
+  selector:
+    name: mysql
+[student@workstation network-sdn]$ 
+[student@workstation ~]$ cd ~/DO280/labs/network-sdn
+[student@workstation network-sdn]$ oc create -f todo-db.yaml
+deployment.apps/mysql created
+service/mysql created
+[student@workstation network-sdn]$ oc status
+In project network-sdn on server https://api.ocp4.example.com:6443
+
+svc/mysql - 172.30.235.235:3306
+  deployment/mysql deploys registry.access.redhat.com/rhscl/mysql-57-rhel7:5.7-47
+    deployment #1 running for 6 seconds - 1 pod
+
+
+1 info identified, use 'oc status --suggest' to see details.
+[student@workstation network-sdn]$ oc get pods
+NAME                     READY   STATUS    RESTARTS   AGE
+mysql-6dd69fbbf4-ptw6n   1/1     Running   0          18s
+[student@workstation network-sdn]$ oc cp db-data.sql mysql-6dd69fbbf4-ptw6n:/tmp
+[student@workstation network-sdn]$ oc rsh mysql-6dd69fbbf4-ptw6n
+sh-4.2$ mysql -u root  items < /tmp/db-data.sql
+sh-4.2$ mysql -u root  items -e "show tables;"
++-----------------+
+| Tables_in_items |
++-----------------+
+| Item            |
++-----------------+
+sh-4.2$ 
