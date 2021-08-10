@@ -4930,3 +4930,515 @@ your cluster and the underlying operating system.
 OpenShift Container Platform.
 • Red Hat does not support reverting your cluster to a previous version. Red Hat only supports
 upgrading to a newer version.
+
+
+----------------------------------------------------------------------------------------------------------------------------
+Chapter 9 | Comprehensive Review
+lab: sOLUTION
+tROUBLESHOOT AN oPENsHIFT cLUSTER AND aPPLICATIONS pAGE: 299
+----------------------------------------------------------------------------------------------------------------------------
+
+
+
+[student@workstation ~]$ lab review-troubleshoot start
+
+Checking prerequisites for Lab: Troubleshoot an OpenShift Cluster and Applications
+
+ Verify the OpenShift cluster is running:
+ · Waiting up to 5 minutes for router pods to be available.....  SUCCESS
+ · Waiting up to 5 minutes for OAuth to be available...........  SUCCESS
+ · API pods are available......................................  SUCCESS
+ · Control plane node 'master01' is ready......................  SUCCESS
+ · Control plane node 'master02' is ready......................  SUCCESS
+ · Control plane node 'master03' is ready......................  SUCCESS
+ Checking for conflicts with existing OpenShift projects:
+ · The 'review-troubleshoot' project is absent.................  SUCCESS
+
+Setting up the classroom for Lab: Troubleshoot an OpenShift Cluster and Applications
+
+ Restoring authentication settings to installation defaults:
+ · Removing 'cluster-admin' role from the 'admin' user.........  SUCCESS
+ · Remove HTPasswd secret: 'localusers'........................  SUCCESS
+ · Remove all configured Identity Providers....................  SUCCESS
+ · Remove all existing users...................................  SUCCESS
+ · Remove all existing groups..................................  SUCCESS
+ · Remove all existing identities..............................  SUCCESS
+ · Removing the 'anyuid' SCC cluster role binding..............  SUCCESS
+ · Download exercise files.....................................  SUCCESS
+
+Overall start status...........................................  SUCCESS
+
+[student@workstation ~]$ source /usr/local/etc/ocp4.config
+[student@workstation ~]$ oc login -u kubeadmin -p ${RHT_OCP4_KUBEADM_PASSWD} https://api.ocp4.example.com:6443
+Login successful.
+
+You have access to 61 projects, the list has been suppressed. You can list all projects with 'oc projects'
+
+Using project "schedule-review".
+[student@workstation ~]$ oc new-project review-troubleshoot
+Now using project "review-troubleshoot" on server "https://api.ocp4.example.com:6443".
+
+You can add applications to this project with the 'new-app' command. For example, try:
+
+    oc new-app ruby~https://github.com/sclorg/ruby-ex.git
+
+to build a new example application in Ruby. Or use kubectl to deploy a simple Kubernetes application:
+
+    kubectl create deployment hello-node --image=gcr.io/hello-minikube-zero-install/hello-node
+
+[student@workstation ~]$ oc new-app --name hello-world-nginx --as-deployment-config https://github.com/RedHatTraining/DO280-apps --context-dir hello-world-nginx
+--> Found container image 11f9dba (23 months old) from registry.access.redhat.com for "registry.access.redhat.com/ubi8:8.0"
+
+    Red Hat Universal Base Image 8 
+    ------------------------------ 
+    The Universal Base Image is designed and engineered to be the base layer for all of your containerized applications, middleware and utilities. This base image is freely redistributable, but Red Hat only supports Red Hat technologies through subscriptions for Red Hat products. This image is maintained by Red Hat and updated regularly.
+
+    Tags: base rhel8
+
+    * An image stream tag will be created as "ubi8:8.0" that will track the source image
+    * A Docker build using source code from https://github.com/RedHatTraining/DO280-apps will be created
+      * The resulting image will be pushed to image stream tag "hello-world-nginx:latest"
+      * Every time "ubi8:8.0" changes a new build will be triggered
+    * This image will be deployed in deployment config "hello-world-nginx"
+    * Port 8080/tcp will be load balanced by service "hello-world-nginx"
+      * Other containers can access this service through the hostname "hello-world-nginx"
+    * WARNING: Image "registry.access.redhat.com/ubi8:8.0" runs as the 'root' user which may not be permitted by your cluster administrator
+
+--> Creating resources ...
+    imagestream.image.openshift.io "ubi8" created
+    imagestream.image.openshift.io "hello-world-nginx" created
+    buildconfig.build.openshift.io "hello-world-nginx" created
+    deploymentconfig.apps.openshift.io "hello-world-nginx" created
+    service "hello-world-nginx" created
+--> Success
+    Build scheduled, use 'oc logs -f bc/hello-world-nginx' to track its progress.
+    Application is not exposed. You can expose services to the outside world by executing one or more of the commands below:
+     'oc expose svc/hello-world-nginx' 
+    Run 'oc status' to view your app.
+[student@workstation ~]$ oc expose service hello-world-nginx --hostname hello-world.apps.ocp4.example.com
+route.route.openshift.io/hello-world-nginx exposed
+[student@workstation ~]$ oc get pods
+NAME                         READY   STATUS      RESTARTS   AGE
+hello-world-nginx-1-5wz8h    1/1     Running     0          56s
+hello-world-nginx-1-build    0/1     Completed   0          112s
+hello-world-nginx-1-deploy   0/1     Completed   0          58s
+[student@workstation ~]$ curl -s http://hello-world.apps.ocp4.example.com | grep Hello
+    <h1>Hello, world from nginx!</h1>
+[student@workstation ~]$ touch /tmp/cluster-users
+[student@workstation ~]$ for user in admin leader developer qa-engineer; do htpasswd -B -b /tmp/cluster-users ${user} review;done
+Adding password for user admin
+Adding password for user leader
+Adding password for user developer
+Adding password for user qa-engineer
+[student@workstation ~]$ oc create secret generic compreview-users --from-file htpasswd=/tmp/cluster-users -n openshift-config
+secret/compreview-users created
+[student@workstation ~]$ oc get oauth cluster -o yaml > /tmp/oauth.yaml
+[student@workstation ~]$ vi !$
+vi /tmp/oauth.yaml
+[student@workstation ~]$ vi /tmp/oauth.yaml
+[student@workstation ~]$ cat !$
+cat /tmp/oauth.yaml
+apiVersion: config.openshift.io/v1
+kind: OAuth
+metadata:
+  creationTimestamp: "2020-08-05T18:23:41Z"
+  generation: 12
+  managedFields:
+  - apiVersion: config.openshift.io/v1
+    fieldsType: FieldsV1
+    fieldsV1:
+      f:spec: {}
+    manager: cluster-version-operator
+    operation: Update
+    time: "2020-08-05T18:23:41Z"
+  name: cluster
+  resourceVersion: "376652"
+  selfLink: /apis/config.openshift.io/v1/oauths/cluster
+  uid: c96a18f6-b8de-4722-b5bf-ca6c39cdb78b
+spec: 
+  identityProviders:
+  - name: cluster-users
+    mappingMethod: claim
+    type: HTPasswd
+    htpasswd:
+      fileData:
+       name: compreview-users
+[student@workstation ~]$ oc replace -f /tmp/oauth.yaml
+oauth.config.openshift.io/cluster replaced
+[student@workstation ~]$ oc adm policy add-cluster-role-to-user cluster-admin admin
+Warning: User 'admin' not found
+clusterrole.rbac.authorization.k8s.io/cluster-admin added: "admin"
+[student@workstation ~]$ oc login -u admin -p review
+Login successful.
+
+You have access to 62 projects, the list has been suppressed. You can list all projects with 'oc projects'
+
+Using project "review-troubleshoot".
+[student@workstation ~]$ for group in leaders developers qa; do oc adm groups new ${group};done
+group.user.openshift.io/leaders created
+group.user.openshift.io/developers created
+group.user.openshift.io/qa created
+[student@workstation ~]$ oc adm groups add-users leaders leader
+group.user.openshift.io/leaders added: "leader"
+[student@workstation ~]$ oc adm groups add-users developers developer
+group.user.openshift.io/developers added: "developer"
+[student@workstation ~]$ oc adm groups add-users qa qa-engineer
+group.user.openshift.io/qa added: "qa-engineer"
+[student@workstation ~]$ oc adm policy add-cluster-role-to-group self-provisioner leaders
+clusterrole.rbac.authorization.k8s.io/self-provisioner added: "leaders"
+[student@workstation ~]$ oc adm policy remove-cluster-role-from-group self-provisioner system:authenticated:oauth
+Warning: Your changes may get lost whenever a master is restarted, unless you prevent reconciliation of this rolebinding using the following command: oc annotate clusterrolebinding.rbac self-provisioners 'rbac.authorization.kubernetes.io/autoupdate=false' --overwrite
+clusterrole.rbac.authorization.k8s.io/self-provisioner removed: "system:authenticated:oauth"
+[student@workstation ~]$ oc policy add-role-to-group edit developers
+clusterrole.rbac.authorization.k8s.io/edit added: "developers"
+[student@workstation ~]$ oc policy add-role-to-group view qa
+clusterrole.rbac.authorization.k8s.io/view added: "qa"
+[student@workstation ~]$ oc login -u developer -p review
+Login successful.
+
+You have access to the following projects and can switch between them with 'oc project <projectname>':
+
+    authorization-review
+  * review-troubleshoot
+    schedule-review
+
+Using project "review-troubleshoot".
+[student@workstation ~]$ oc new-app --name mysql --docker-image registry.access.redhat.com/rhscl/mysql-57-rhel7:5.7
+--> Found container image 60726b3 (22 months old) from registry.access.redhat.com for "registry.access.redhat.com/rhscl/mysql-57-rhel7:5.7"
+
+    MySQL 5.7 
+    --------- 
+    MySQL is a multi-user, multi-threaded SQL database server. The container image provides a containerized packaging of the MySQL mysqld daemon and client application. The mysqld server daemon accepts connections from clients and provides access to content from MySQL databases on behalf of the clients.
+
+    Tags: database, mysql, mysql57, rh-mysql57
+
+    * An image stream tag will be created as "mysql:5.7" that will track this image
+
+--> Creating resources ...
+    imagestream.image.openshift.io "mysql" created
+    deployment.apps "mysql" created
+    service "mysql" created
+--> Success
+    Application is not exposed. You can expose services to the outside world by executing one or more of the commands below:
+     'oc expose svc/mysql' 
+    Run 'oc status' to view your app.
+[student@workstation ~]$ oc create secret generic mysql --from-literal password=r3dh4t123
+secret/mysql created
+[student@workstation ~]$ oc set env deployment mysql --prefix MYSQL_ROOT_ --from secret/mysql
+deployment.apps/mysql updated
+[student@workstation ~]$ oc set volumes deployment/mysql --name mysql-storage --add --type pvc --claim-size 2Gi --claim-mode rwo --mount-path /var/lib/mysql/data
+deployment.apps/mysql volume updated
+[student@workstation ~]$ oc get pods -l deployment=mysql
+NAME                     READY   STATUS    RESTARTS   AGE
+mysql-858b94ff9f-ncfxd   1/1     Running   0          18s
+[student@workstation ~]$ oc get pvc
+NAME        STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+pvc-nln6f   Bound    pvc-90f1d723-e645-4c48-8124-a1bfac4436c1   2Gi        RWO            nfs-storage    27s
+[student@workstation ~]$ oc exec mysql-858b94ff9f-ncfxd -- df -h |grep /var/lib/mysql/data
+192.168.50.254:/exports/review-troubleshoot-pvc-nln6f-pvc-90f1d723-e645-4c48-8124-a1bfac4436c1   40G  879M   40G   3% /var/lib/mysql/data
+[student@workstation ~]$ oc new-app --name wordpress --docker-image quay.io/redhattraining/wordpress:5.3.0 -e WORDPRESS_DB_HOST=mysql -e WORDPRESS_DB_USER=root -e WORDPRESS_DB_NAME=wordpress
+--> Found container image ee025cb (20 months old) from quay.io for "quay.io/redhattraining/wordpress:5.3.0"
+
+    * An image stream tag will be created as "wordpress:5.3.0" that will track this image
+
+--> Creating resources ...
+    imagestream.image.openshift.io "wordpress" created
+    deployment.apps "wordpress" created
+    service "wordpress" created
+--> Success
+    Application is not exposed. You can expose services to the outside world by executing one or more of the commands below:
+     'oc expose svc/wordpress' 
+    Run 'oc status' to view your app.
+[student@workstation ~]$ oc set env deployment/wordpress --prefix WORDPRESS_DB_ --from secret/mysql
+deployment.apps/wordpress updated
+[student@workstation ~]$ oc create serviceaccount wordpress-sa
+serviceaccount/wordpress-sa created
+[student@workstation ~]$ oc login -u admin -p review
+Login successful.
+
+You have access to 62 projects, the list has been suppressed. You can list all projects with 'oc projects'
+
+Using project "review-troubleshoot".
+[student@workstation ~]$ oc adm policy add-scc-to-user anyuid -z wordpress-sa
+clusterrole.rbac.authorization.k8s.io/system:openshift:scc:anyuid added: "wordpress-sa"
+[student@workstation ~]$ oc login -u developer -p review
+Login successful.
+
+You have access to the following projects and can switch between them with 'oc project <projectname>':
+
+    authorization-review
+  * review-troubleshoot
+    schedule-review
+
+Using project "review-troubleshoot".
+[student@workstation ~]$ oc set serviceaccount deployment/wordpress wordpress-sa
+deployment.apps/wordpress serviceaccount updated
+[student@workstation ~]$ oc expose service wordpress \
+> >
+bash: syntax error near unexpected token `newline'
+[student@workstation ~]$ oc expose service wordpress --hostname wordpress.apps.ocp4.example.com
+route.route.openshift.io/wordpress exposed
+[student@workstation ~]$ ~/DO280/labs/review-troubleshoot/deploy_famous-quotes.sh
+Creating famous-quotes database
+Deploying famous-quotes application
+deploymentconfig.apps.openshift.io/famous-quotes created
+service/famous-quotes created
+[student@workstation ~]$ cat !$
+cat ~/DO280/labs/review-troubleshoot/deploy_famous-quotes.sh
+#!/usr/bin/bash
+PROJECT="review-troubleshoot"
+
+# Identify the mysql pod
+if [ $(oc get pods -l deploymentconfig=mysql -n ${PROJECT} -o name | wc -l) -eq 1 ]
+then
+  # mysql application was created as a deploymentconfig
+  MYPOD=$(oc get pods -l deploymentconfig=mysql -n ${PROJECT} -o template --template '{{range .items}}{{.metadata.name}}{{end}}')
+elif [ $(oc get pods -l deployment=mysql -n ${PROJECT} -o name | wc -l) -eq 1 ]
+then
+  # mysql application was created as a deployment
+  MYPOD=$(oc get pods -l deployment=mysql -n ${PROJECT} -o template --template '{{range .items}}{{.metadata.name}}{{end}}')
+fi
+
+# Check if the "defaultdb" database already exists
+if ! oc exec ${MYPOD} -n ${PROJECT} -- /opt/rh/rh-mysql57/root/usr/bin/mysql -u root -e 'show databases;' | grep -q defaultdb
+then
+  echo "Creating famous-quotes database"
+  oc exec ${MYPOD} -n ${PROJECT} -- /opt/rh/rh-mysql57/root/usr/bin/mysql -u root -e 'CREATE DATABASE defaultdb'
+fi
+
+echo "Deploying famous-quotes application"
+
+oc apply -f /home/student/DO280/labs/${PROJECT}/famous-quotes.yaml
+[student@workstation ~]$ oc get pods
+NAME                         READY   STATUS      RESTARTS   AGE
+famous-quotes-1-deploy       0/1     Pending     0          29s
+hello-world-nginx-1-5wz8h    1/1     Running     0          28m
+hello-world-nginx-1-build    0/1     Completed   0          29m
+hello-world-nginx-1-deploy   0/1     Completed   0          28m
+mysql-858b94ff9f-ncfxd       1/1     Running     0          9m51s
+wordpress-7b465bd767-tjlv2   1/1     Running     0          3m56s
+[student@workstation ~]$ oc get events --sort-by='{.lastTimestamp}'
+LAST SEEN   TYPE      REASON                         OBJECT                                      MESSAGE
+29m         Warning   BuildConfigInstantiateFailed   buildconfig/hello-world-nginx               error instantiating Build from BuildConfig review-troubleshoot/hello-world-nginx (0): Error resolving ImageStreamTag ubi8:8.0 in namespace review-troubleshoot: unable to find latest tagged image
+29m         Normal    Scheduled                      pod/hello-world-nginx-1-build               Successfully assigned review-troubleshoot/hello-world-nginx-1-build to master03
+29m         Normal    AddedInterface                 pod/hello-world-nginx-1-build               Add eth0 [10.9.0.15/23]
+29m         Normal    Pulling                        pod/hello-world-nginx-1-build               Pulling image "quay.io/openshift-release-dev/ocp-v4.0-art-dev@sha256:57b9c1fb0b0c24603f0ef10f57cf4435a09b45fe3f3b561e2fa6924da0491d27"
+29m         Normal    Pulled                         pod/hello-world-nginx-1-build               Successfully pulled image "quay.io/openshift-release-dev/ocp-v4.0-art-dev@sha256:57b9c1fb0b0c24603f0ef10f57cf4435a09b45fe3f3b561e2fa6924da0491d27"
+29m         Normal    Started                        pod/hello-world-nginx-1-build               Started container git-clone
+29m         Normal    Created                        pod/hello-world-nginx-1-build               Created container git-clone
+29m         Normal    BuildStarted                   build/hello-world-nginx-1                   Build review-troubleshoot/hello-world-nginx-1 is now running
+29m         Normal    Pulled                         pod/hello-world-nginx-1-build               Container image "quay.io/openshift-release-dev/ocp-v4.0-art-dev@sha256:57b9c1fb0b0c24603f0ef10f57cf4435a09b45fe3f3b561e2fa6924da0491d27" already present on machine
+29m         Normal    Created                        pod/hello-world-nginx-1-build               Created container manage-dockerfile
+29m         Normal    Pulled                         pod/hello-world-nginx-1-build               Container image "quay.io/openshift-release-dev/ocp-v4.0-art-dev@sha256:57b9c1fb0b0c24603f0ef10f57cf4435a09b45fe3f3b561e2fa6924da0491d27" already present on machine
+29m         Normal    Started                        pod/hello-world-nginx-1-build               Started container manage-dockerfile
+29m         Normal    Created                        pod/hello-world-nginx-1-build               Created container docker-build
+29m         Normal    Started                        pod/hello-world-nginx-1-build               Started container docker-build
+28m         Normal    DeploymentCreated              deploymentconfig/hello-world-nginx          Created new replication controller "hello-world-nginx-1" for version 1
+28m         Normal    BuildCompleted                 build/hello-world-nginx-1                   Build review-troubleshoot/hello-world-nginx-1 completed successfully
+28m         Normal    Scheduled                      pod/hello-world-nginx-1-deploy              Successfully assigned review-troubleshoot/hello-world-nginx-1-deploy to master03
+28m         Normal    Pulled                         pod/hello-world-nginx-1-deploy              Container image "quay.io/openshift-release-dev/ocp-v4.0-art-dev@sha256:17a0c1d7e410c74d90a1051b495c3a380f3c1c2ff3ea8a69355687a1ebb16921" already present on machine
+28m         Normal    Created                        pod/hello-world-nginx-1-deploy              Created container deployment
+28m         Normal    Started                        pod/hello-world-nginx-1-deploy              Started container deployment
+28m         Normal    Scheduled                      pod/hello-world-nginx-1-5wz8h               Successfully assigned review-troubleshoot/hello-world-nginx-1-5wz8h to master01
+28m         Normal    AddedInterface                 pod/hello-world-nginx-1-deploy              Add eth0 [10.9.0.16/23]
+28m         Normal    SuccessfulCreate               replicationcontroller/hello-world-nginx-1   Created pod: hello-world-nginx-1-5wz8h
+28m         Normal    AddedInterface                 pod/hello-world-nginx-1-5wz8h               Add eth0 [10.10.0.39/23]
+28m         Normal    Pulling                        pod/hello-world-nginx-1-5wz8h               Pulling image "image-registry.openshift-image-registry.svc:5000/review-troubleshoot/hello-world-nginx@sha256:12c2670a4e908335e24ec595c1810a63732a32db652c1e0f4025f85eb7cb6da2"
+28m         Normal    Created                        pod/hello-world-nginx-1-5wz8h               Created container hello-world-nginx
+28m         Normal    Pulled                         pod/hello-world-nginx-1-5wz8h               Successfully pulled image "image-registry.openshift-image-registry.svc:5000/review-troubleshoot/hello-world-nginx@sha256:12c2670a4e908335e24ec595c1810a63732a32db652c1e0f4025f85eb7cb6da2"
+28m         Normal    Started                        pod/hello-world-nginx-1-5wz8h               Started container hello-world-nginx
+13m         Warning   FailedCreate                   replicaset/mysql-647f558566                 Error creating: Pod "mysql-647f558566-lfl7z" is invalid: spec.containers[0].image: Invalid value: " ": must not have leading or trailing whitespace
+13m         Normal    ScalingReplicaSet              deployment/mysql                            Scaled up replica set mysql-647f558566 to 1
+13m         Warning   FailedCreate                   replicaset/mysql-647f558566                 Error creating: Pod "mysql-647f558566-69tl6" is invalid: spec.containers[0].image: Invalid value: " ": must not have leading or trailing whitespace
+13m         Warning   FailedCreate                   replicaset/mysql-647f558566                 Error creating: Pod "mysql-647f558566-zwct7" is invalid: spec.containers[0].image: Invalid value: " ": must not have leading or trailing whitespace
+13m         Warning   FailedCreate                   replicaset/mysql-647f558566                 Error creating: Pod "mysql-647f558566-56wjs" is invalid: spec.containers[0].image: Invalid value: " ": must not have leading or trailing whitespace
+13m         Warning   FailedCreate                   replicaset/mysql-647f558566                 Error creating: Pod "mysql-647f558566-5rlkt" is invalid: spec.containers[0].image: Invalid value: " ": must not have leading or trailing whitespace
+13m         Normal    ScalingReplicaSet              deployment/mysql                            Scaled up replica set mysql-f886f875c to 1
+13m         Warning   FailedCreate                   replicaset/mysql-647f558566                 Error creating: Pod "mysql-647f558566-mt65h" is invalid: spec.containers[0].image: Invalid value: " ": must not have leading or trailing whitespace
+13m         Warning   FailedCreate                   replicaset/mysql-647f558566                 Error creating: Pod "mysql-647f558566-hflqh" is invalid: spec.containers[0].image: Invalid value: " ": must not have leading or trailing whitespace
+13m         Warning   FailedCreate                   replicaset/mysql-647f558566                 Error creating: Pod "mysql-647f558566-r29dj" is invalid: spec.containers[0].image: Invalid value: " ": must not have leading or trailing whitespace
+13m         Normal    Scheduled                      pod/mysql-f886f875c-stdbc                   Successfully assigned review-troubleshoot/mysql-f886f875c-stdbc to master03
+13m         Normal    SuccessfulCreate               replicaset/mysql-f886f875c                  Created pod: mysql-f886f875c-stdbc
+13m         Warning   FailedCreate                   replicaset/mysql-647f558566                 Error creating: Pod "mysql-647f558566-npvkh" is invalid: spec.containers[0].image: Invalid value: " ": must not have leading or trailing whitespace
+13m         Normal    AddedInterface                 pod/mysql-f886f875c-stdbc                   Add eth0 [10.9.0.17/23]
+13m         Normal    Pulling                        pod/mysql-f886f875c-stdbc                   Pulling image "registry.access.redhat.com/rhscl/mysql-57-rhel7@sha256:9a781abe7581cc141e14a7e404ec34125b3e89c008b14f4e7b41e094fd3049fe"
+13m         Normal    Pulled                         pod/mysql-f886f875c-stdbc                   Successfully pulled image "registry.access.redhat.com/rhscl/mysql-57-rhel7@sha256:9a781abe7581cc141e14a7e404ec34125b3e89c008b14f4e7b41e094fd3049fe"
+12m         Warning   FailedCreate                   replicaset/mysql-647f558566                 (combined from similar events): Error creating: Pod "mysql-647f558566-2ddtg" is invalid: spec.containers[0].image: Invalid value: " ": must not have leading or trailing whitespace
+12m         Normal    Created                        pod/mysql-f886f875c-stdbc                   Created container mysql
+12m         Normal    Started                        pod/mysql-f886f875c-stdbc                   Started container mysql
+12m         Normal    Pulled                         pod/mysql-f886f875c-stdbc                   Container image "registry.access.redhat.com/rhscl/mysql-57-rhel7@sha256:9a781abe7581cc141e14a7e404ec34125b3e89c008b14f4e7b41e094fd3049fe" already present on machine
+12m         Normal    ScalingReplicaSet              deployment/mysql                            Scaled down replica set mysql-647f558566 to 0
+12m         Normal    SuccessfulCreate               replicaset/mysql-6fc75f8dfb                 Created pod: mysql-6fc75f8dfb-hx6nl
+12m         Normal    Scheduled                      pod/mysql-6fc75f8dfb-hx6nl                  Successfully assigned review-troubleshoot/mysql-6fc75f8dfb-hx6nl to master01
+12m         Normal    ScalingReplicaSet              deployment/mysql                            Scaled up replica set mysql-6fc75f8dfb to 1
+12m         Normal    AddedInterface                 pod/mysql-6fc75f8dfb-hx6nl                  Add eth0 [10.10.0.41/23]
+12m         Normal    Pulling                        pod/mysql-6fc75f8dfb-hx6nl                  Pulling image "registry.access.redhat.com/rhscl/mysql-57-rhel7@sha256:9a781abe7581cc141e14a7e404ec34125b3e89c008b14f4e7b41e094fd3049fe"
+12m         Warning   BackOff                        pod/mysql-f886f875c-stdbc                   Back-off restarting failed container
+12m         Normal    SuccessfulDelete               replicaset/mysql-f886f875c                  Deleted pod: mysql-f886f875c-stdbc
+12m         Normal    Started                        pod/mysql-6fc75f8dfb-hx6nl                  Started container mysql
+12m         Normal    Created                        pod/mysql-6fc75f8dfb-hx6nl                  Created container mysql
+12m         Normal    ScalingReplicaSet              deployment/mysql                            Scaled down replica set mysql-f886f875c to 0
+12m         Normal    Pulled                         pod/mysql-6fc75f8dfb-hx6nl                  Successfully pulled image "registry.access.redhat.com/rhscl/mysql-57-rhel7@sha256:9a781abe7581cc141e14a7e404ec34125b3e89c008b14f4e7b41e094fd3049fe"
+10m         Normal    Scheduled                      pod/mysql-858b94ff9f-ncfxd                  Successfully assigned review-troubleshoot/mysql-858b94ff9f-ncfxd to master03
+10m         Normal    ScalingReplicaSet              deployment/mysql                            Scaled up replica set mysql-858b94ff9f to 1
+10m         Normal    Provisioning                   persistentvolumeclaim/pvc-nln6f             External provisioner is provisioning volume for claim "review-troubleshoot/pvc-nln6f"
+10m         Normal    ProvisioningSucceeded          persistentvolumeclaim/pvc-nln6f             Successfully provisioned volume pvc-90f1d723-e645-4c48-8124-a1bfac4436c1
+10m         Warning   FailedScheduling               pod/mysql-858b94ff9f-ncfxd                  running "VolumeBinding" filter plugin for pod "mysql-858b94ff9f-ncfxd": pod has unbound immediate PersistentVolumeClaims
+10m         Normal    ExternalProvisioning           persistentvolumeclaim/pvc-nln6f             waiting for a volume to be created, either by external provisioner "nfs-storage-provisioner" or manually created by system administrator
+10m         Normal    SuccessfulCreate               replicaset/mysql-858b94ff9f                 Created pod: mysql-858b94ff9f-ncfxd
+10m         Normal    SuccessfulDelete               replicaset/mysql-6fc75f8dfb                 Deleted pod: mysql-6fc75f8dfb-hx6nl
+10m         Normal    Killing                        pod/mysql-6fc75f8dfb-hx6nl                  Stopping container mysql
+10m         Normal    Pulled                         pod/mysql-858b94ff9f-ncfxd                  Container image "registry.access.redhat.com/rhscl/mysql-57-rhel7@sha256:9a781abe7581cc141e14a7e404ec34125b3e89c008b14f4e7b41e094fd3049fe" already present on machine
+10m         Normal    Created                        pod/mysql-858b94ff9f-ncfxd                  Created container mysql
+10m         Normal    Started                        pod/mysql-858b94ff9f-ncfxd                  Started container mysql
+10m         Normal    AddedInterface                 pod/mysql-858b94ff9f-ncfxd                  Add eth0 [10.9.0.18/23]
+10m         Normal    ScalingReplicaSet              deployment/mysql                            Scaled down replica set mysql-6fc75f8dfb to 0
+6m1s        Normal    ScalingReplicaSet              deployment/wordpress                        Scaled up replica set wordpress-5b9f6c967b to 1
+6m1s        Warning   FailedCreate                   replicaset/wordpress-5b9f6c967b             Error creating: Pod "wordpress-5b9f6c967b-6wwd6" is invalid: spec.containers[0].image: Invalid value: " ": must not have leading or trailing whitespace
+6m1s        Warning   FailedCreate                   replicaset/wordpress-5b9f6c967b             Error creating: Pod "wordpress-5b9f6c967b-7v8sm" is invalid: spec.containers[0].image: Invalid value: " ": must not have leading or trailing whitespace
+6m1s        Warning   FailedCreate                   replicaset/wordpress-5b9f6c967b             Error creating: Pod "wordpress-5b9f6c967b-65dsv" is invalid: spec.containers[0].image: Invalid value: " ": must not have leading or trailing whitespace
+6m1s        Warning   FailedCreate                   replicaset/wordpress-5b9f6c967b             Error creating: Pod "wordpress-5b9f6c967b-kh9lj" is invalid: spec.containers[0].image: Invalid value: " ": must not have leading or trailing whitespace
+6m1s        Warning   FailedCreate                   replicaset/wordpress-5b9f6c967b             Error creating: Pod "wordpress-5b9f6c967b-qhvz5" is invalid: spec.containers[0].image: Invalid value: " ": must not have leading or trailing whitespace
+6m1s        Warning   FailedCreate                   replicaset/wordpress-5b9f6c967b             Error creating: Pod "wordpress-5b9f6c967b-qv76v" is invalid: spec.containers[0].image: Invalid value: " ": must not have leading or trailing whitespace
+6m1s        Warning   FailedCreate                   replicaset/wordpress-5b9f6c967b             Error creating: Pod "wordpress-5b9f6c967b-6675t" is invalid: spec.containers[0].image: Invalid value: " ": must not have leading or trailing whitespace
+6m1s        Warning   FailedCreate                   replicaset/wordpress-5b9f6c967b             Error creating: Pod "wordpress-5b9f6c967b-bkwgb" is invalid: spec.containers[0].image: Invalid value: " ": must not have leading or trailing whitespace
+6m          Normal    SuccessfulCreate               replicaset/wordpress-86697c65d6             Created pod: wordpress-86697c65d6-s52gk
+6m          Warning   FailedCreate                   replicaset/wordpress-5b9f6c967b             Error creating: Pod "wordpress-5b9f6c967b-7cfx8" is invalid: spec.containers[0].image: Invalid value: " ": must not have leading or trailing whitespace
+6m          Normal    Scheduled                      pod/wordpress-86697c65d6-s52gk              Successfully assigned review-troubleshoot/wordpress-86697c65d6-s52gk to master01
+6m          Normal    ScalingReplicaSet              deployment/wordpress                        Scaled up replica set wordpress-86697c65d6 to 1
+5m59s       Warning   FailedCreate                   replicaset/wordpress-5b9f6c967b             (combined from similar events): Error creating: Pod "wordpress-5b9f6c967b-b4rqj" is invalid: spec.containers[0].image: Invalid value: " ": must not have leading or trailing whitespace
+5m58s       Normal    AddedInterface                 pod/wordpress-86697c65d6-s52gk              Add eth0 [10.10.0.42/23]
+5m57s       Normal    ScalingReplicaSet              deployment/wordpress                        Scaled down replica set wordpress-5b9f6c967b to 0
+5m27s       Normal    ScalingReplicaSet              deployment/wordpress                        Scaled up replica set wordpress-6d54d7864c to 1
+5m27s       Normal    SuccessfulCreate               replicaset/wordpress-6d54d7864c             Created pod: wordpress-6d54d7864c-2ptkf
+5m27s       Normal    Scheduled                      pod/wordpress-6d54d7864c-2ptkf              Successfully assigned review-troubleshoot/wordpress-6d54d7864c-2ptkf to master03
+5m26s       Normal    Pulled                         pod/wordpress-86697c65d6-s52gk              Container image "quay.io/redhattraining/wordpress@sha256:e206cd1d5888b601bb7b835b55181348375c4a494a2b1b4ad9c772de02b16f62" already present on machine
+5m26s       Normal    Started                        pod/wordpress-86697c65d6-s52gk              Started container wordpress
+5m26s       Normal    Created                        pod/wordpress-86697c65d6-s52gk              Created container wordpress
+5m25s       Normal    AddedInterface                 pod/wordpress-6d54d7864c-2ptkf              Add eth0 [10.9.0.19/23]
+5m24s       Normal    SuccessfulDelete               replicaset/wordpress-86697c65d6             Deleted pod: wordpress-86697c65d6-s52gk
+5m24s       Normal    ScalingReplicaSet              deployment/wordpress                        Scaled down replica set wordpress-86697c65d6 to 0
+5m24s       Normal    Killing                        pod/wordpress-86697c65d6-s52gk              Stopping container wordpress
+4m41s       Normal    Created                        pod/wordpress-6d54d7864c-2ptkf              Created container wordpress
+4m41s       Normal    Pulled                         pod/wordpress-6d54d7864c-2ptkf              Container image "quay.io/redhattraining/wordpress@sha256:e206cd1d5888b601bb7b835b55181348375c4a494a2b1b4ad9c772de02b16f62" already present on machine
+4m40s       Normal    Started                        pod/wordpress-6d54d7864c-2ptkf              Started container wordpress
+4m14s       Warning   BackOff                        pod/wordpress-6d54d7864c-2ptkf              Back-off restarting failed container
+4m10s       Normal    ScalingReplicaSet              deployment/wordpress                        Scaled up replica set wordpress-7b465bd767 to 1
+4m10s       Normal    Scheduled                      pod/wordpress-7b465bd767-tjlv2              Successfully assigned review-troubleshoot/wordpress-7b465bd767-tjlv2 to master01
+4m10s       Normal    SuccessfulCreate               replicaset/wordpress-7b465bd767             Created pod: wordpress-7b465bd767-tjlv2
+4m8s        Normal    Created                        pod/wordpress-7b465bd767-tjlv2              Created container wordpress
+4m8s        Normal    AddedInterface                 pod/wordpress-7b465bd767-tjlv2              Add eth0 [10.10.0.43/23]
+4m8s        Normal    Pulled                         pod/wordpress-7b465bd767-tjlv2              Container image "quay.io/redhattraining/wordpress@sha256:e206cd1d5888b601bb7b835b55181348375c4a494a2b1b4ad9c772de02b16f62" already present on machine
+4m8s        Normal    Started                        pod/wordpress-7b465bd767-tjlv2              Started container wordpress
+4m7s        Normal    ScalingReplicaSet              deployment/wordpress                        Scaled down replica set wordpress-6d54d7864c to 0
+4m7s        Normal    SuccessfulDelete               replicaset/wordpress-6d54d7864c             Deleted pod: wordpress-6d54d7864c-2ptkf
+43s         Warning   FailedScheduling               pod/famous-quotes-1-deploy                  0/3 nodes are available: 3 node(s) didn't match node selector.
+43s         Normal    DeploymentCreated              deploymentconfig/famous-quotes              Created new replication controller "famous-quotes-1" for version 1
+[student@workstation ~]$ oc get dc/famous-quotes -o yaml > /tmp/famous-dc.yaml
+[student@workstation ~]$ vi /tmp/famous-dc.yaml 
+[student@workstation ~]$ oc replace -f /tmp/famous-dc.yaml
+deploymentconfig.apps.openshift.io/famous-quotes replaced
+[student@workstation ~]$ oc get pods -l app=famous-quotes
+NAME                    READY   STATUS    RESTARTS   AGE
+famous-quotes-2-9nqxg   1/1     Running   0          8s
+[student@workstation ~]$ oc expose service famous-quotes --hostname quotes.apps.ocp4.example.com
+route.route.openshift.io/famous-quotes exposed
+[student@workstation ~]$ curl -s http://quotes.apps.ocp4.example.com | grep Quote
+        <title>Quotes</title>
+        <h1>Quote List</h1>
+[student@workstation ~]$ lab review-troubleshoot grade
+
+Grading the student's work for Lab: Troubleshoot an OpenShift Cluster and Applications
+
+ · The 'review-troubleshoot' project exists....................  PASS
+
+ Hello World Application
+ · The 'hello-world-nginx' application created as a 'deployment
+   config'.....................................................  PASS
+ · The 'hello-world-nginx' application responds to external req
+   uests.......................................................  PASS
+
+ Identity Provider Configuration and Users
+ · The 'cluster-users' identity provider exists................  PASS
+ · The 'compreview-users' secret exists........................  PASS
+ · The identity provider uses the 'compreview-users' secret....  PASS
+
+ User Groups and Roles
+ · The 'admin' user can log in with a password of 'review'.....  PASS
+ · The 'admin' user has the 'cluster-admin' cluster role.......  PASS
+
+ · The 'leaders' group exists..................................  PASS
+ · The 'leaders' group contains the 'leader' user..............  PASS
+ · The 'leader' user can log in with a password of 'review'....  PASS
+ · The 'leaders' group has the 'self-provisioner' cluster role.  PASS
+
+ · The 'self-provisioner' cluster role has been removed from th
+   e 'system:authenticated:oauth' group........................  PASS
+
+ · The 'developers' group exists...............................  PASS
+ · The 'developers' group contains the 'developer' user........  PASS
+ · The 'developer' user can log in with a password of 'review'.  PASS
+ · The 'developers' group has the 'edit' role on the 'review-tr
+   oubleshoot' project.........................................  PASS
+
+ · The 'qa' group exists.......................................  PASS
+ · The 'qa' group contains the 'qa-engineer' user..............  PASS
+ · The 'qa-engineer' user can log in with a password of 'review
+   '...........................................................  PASS
+ · The 'qa' group has the 'view' role on the 'review-troublesho
+   ot' project.................................................  PASS
+
+ MySQL Database Application Configuration
+ · The 'mysql' database application created as a 'deployment'..  PASS
+ · The 'mysql' secret exists...................................  PASS
+ · The 'MYSQL_ROOT_PASSWORD' environment variable is set from t
+   he 'mysql' secret...........................................  PASS
+ · deployment.apps/mysql mounts a volume to '/var/lib/mysql/dat
+   a'..........................................................  PASS
+ · deployment.apps/mysql uses a PVC with a size of '2' GB......  PASS
+ · deployment.apps/mysql uses a PVC with the 'ReadWriteOnce' mo
+   de..........................................................  PASS
+
+ Wordpress Application Configuration
+ · The 'wordpress' application created as a 'deployment'.......  PASS
+ · The 'wordpress-sa' service account exists...................  PASS
+ · The 'wordpress-sa' service account uses the 'anyuid' SCC....  PASS
+ · The 'wordpress' application uses the 'wordpress-sa' service 
+   account.....................................................  PASS
+ · The 'wordpress' application uses the 'anyuid' security conte
+   xt constraint...............................................  PASS
+ · The 'WORDPRESS_DB_PASSWORD' environment variable is set from
+   the 'mysql' secret..........................................  PASS
+ · The 'wordpress' application responds to exteral requests....  PASS
+
+ Famous Quotes App Configuration
+ · The 'famous-quotes' application created as a 'deploymentconf
+   ig'.........................................................  PASS
+ · The 'famous-quotes' application does not specify a node sele
+   ctor........................................................  PASS
+ · The 'famous-quotes' application responds to exteral requests
+   ............................................................  PASS
+
+Overall exercise grade.........................................  PASS
+
+[student@workstation ~]$ lab review-troubleshoot finish
+
+Completing Lab: Troubleshoot an OpenShift Cluster and Applications
+
+ Restoring authentication settings to installation defaults:
+ · Removing 'cluster-admin' role from the 'admin' user.........  SUCCESS
+ · Remove HTPasswd secret: 'compreview-users'..................  SUCCESS
+ · Remove all configured Identity Providers....................  SUCCESS
+ · Remove all existing users...................................  SUCCESS
+ · Remove all existing groups..................................  SUCCESS
+ · Remove all existing identities..............................  SUCCESS
+ · Delete OpenShift project 'review-troubleshoot'..............  SUCCESS
+ · Wait for project 'review-troubleshoot' to be gone...........  SUCCESS
+ · Remove exercise files.......................................  SUCCESS
+ · Removing 'self-provisioner' role from group 'leaders'.......  SUCCESS
+ · Restoring cluster privileges................................  SUCCESS
+ · Removing the 'anyuid' SCC cluster role binding..............  SUCCESS
+
+Please use start if you wish to do the exercise again.
+
+[student@workstation ~]$ 
