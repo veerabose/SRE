@@ -4937,7 +4937,19 @@ Chapter 9 | Comprehensive Review
 lab: sOLUTION
 tROUBLESHOOT AN oPENsHIFT cLUSTER AND aPPLICATIONS pAGE: 299
 ----------------------------------------------------------------------------------------------------------------------------
-
+In this review, you will allow developers to access a cluster and troubleshoot application
+deployments.
+Outcomes
+You should be able to:
+• Create a new project.
+• Perform a smoke test of the OpenShift cluster by creating an application using the
+source-to-image process.
+• Create applications using either deployment or deploymentconfig resources.
+• Use the HTPasswd identity provider for managing users.
+• Create and manage groups.
+• Manage RBAC and SCC for users and groups.
+• Manage secrets for databases and applications.
+• Troubleshoot common problems.
 
 
 [student@workstation ~]$ lab review-troubleshoot start
