@@ -4006,4 +4006,456 @@ Please use start if you wish to do the exercise again.
 
 [student@workstation ~]$ 
 
+--------------------------------------------------------------------------------------------------------------------------
+Chapter 6 | Controlling Pod Scheduling
+Guided Exercise
+Limiting Resource Usage by an Application Page: 201
+---------------------------------------------------------------------------------------------------------------------------
+In this exercise, you will configure an application so that it does not consume all computing
+resources from the cluster and its worker nodes.
+Outcomes
+You should be able to use the OpenShift command-line interface to:
+• Configure an application to specify resource requests for CPU and memory usage.
+• Modify an application to work within existing cluster restrictions.
+• Create a quota to limit the total amount of CPU, memory, and configuration maps
+available to a project.
+
+
+[student@workstation ~]$ lab schedule-limit start
+
+Checking prerequisites for Guided Exercise: Limiting Resource Usage by an Application
+
+ Verify the OpenShift cluster is running:
+ · Router pods are available...................................  SUCCESS
+ · OAuth pods are available....................................  SUCCESS
+ · API pods are available......................................  SUCCESS
+ · Control plane node 'master01' is ready......................  SUCCESS
+ · Control plane node 'master02' is ready......................  SUCCESS
+ · Control plane node 'master03' is ready......................  SUCCESS
+
+ Checking for conflicts with existing OpenShift projects:
+ · The 'schedule-limit' project is absent......................  SUCCESS
+ Checking for conflicts with existing OpenShift projects:
+ · The 'template-test' project is absent.......................  SUCCESS
+
+Setting up the classroom for Guided Exercise: Limiting Resource Usage by an Application
+
+ · Validate 'admin' can log in with password 'redhat'..........  SUCCESS
+ · Validate 'leader' can log in with password 'redhat'.........  SUCCESS
+ · Validate 'developer' can log in with password 'developer'...  SUCCESS
+
+ Preparing the student's cluster:
+ · Download exercise files.....................................  SUCCESS
+ · Download solution files.....................................  SUCCESS
+
+Overall start status...........................................  SUCCESS
+
+[student@workstation ~]$ oc login -u developer -p developer https://api.ocp4.example.com:6443
+Login successful.
+
+You have one project on this server: "authorization-review"
+
+Using project "authorization-review".
+[student@workstation ~]$ oc new-project schedule-limit
+Now using project "schedule-limit" on server "https://api.ocp4.example.com:6443".
+
+You can add applications to this project with the 'new-app' command. For example, try:
+
+    oc new-app ruby~https://github.com/sclorg/ruby-ex.git
+
+to build a new example application in Ruby. Or use kubectl to deploy a simple Kubernetes application:
+
+    kubectl create deployment hello-node --image=gcr.io/hello-minikube-zero-install/hello-node
+
+[student@workstation ~]$ oc create deployment hello-limit --image quay.io/redhattraining/hello-world-nginx:v1.0 --dry-run=client -o yaml > ~/DO280/labs/schedule-limit/hello-limit.yaml
+[student@workstation ~]$ ^C
+[student@workstation ~]$ vi ~/DO280/labs/schedule-limit/hello-limit.yaml
+[student@workstation ~]$ oc create --save-config -f ~/DO280/labs/schedule-limit/hello-limit.yaml
+deployment.apps/hello-limit created
+[student@workstation ~]$ oc get pods
+NAME                          READY   STATUS    RESTARTS   AGE
+hello-limit-6dcc899b8-9tncr   1/1     Running   0          24s
+[student@workstation ~]$ oc get events --field-selector type=Warning
+No resources found in schedule-limit namespace.
+[student@workstation ~]$ oc get pods
+NAME                          READY   STATUS    RESTARTS   AGE
+hello-limit-6dcc899b8-9tncr   1/1     Running   0          67s
+[student@workstation ~]$ oc describe pod hello-limit-6dcc899b8-9tncr | less
+[student@workstation ~]$ vi ~/DO280/labs/schedule-limit/hello-limit.yaml
+[student@workstation ~]$ oc describe deployment/hello-limit | less
+[student@workstation ~]$ vi ~/DO280/labs/schedule-limit/hello-limit.yaml
+[student@workstation ~]$ oc delete deployment/hello-limit
+deployment.apps "hello-limit" deleted
+[student@workstation ~]$ oc create --save-config -f ~/DO280/labs/schedule-limit/hello-limit.yaml
+deployment.apps/hello-limit created
+[student@workstation ~]$ oc get pods
+NAME                           READY   STATUS    RESTARTS   AGE
+hello-limit-5cc86ff6b8-42txd   0/1     Pending   0          9s
+[student@workstation ~]$ cat ~/DO280/labs/schedule-limit/hello-limit.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: hello-limit
+  name: hello-limit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hello-limit
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: hello-limit
+    spec:
+      containers:
+      - image: quay.io/redhattraining/hello-world-nginx:v1.0
+        name: hello-world-nginx
+        resources: 
+          requests:
+            cpu: "3"
+            memory: 20Mi
+status: {}
+[student@workstation ~]$ oc describe deployment/hello-limit 
+Name:                   hello-limit
+Namespace:              schedule-limit
+CreationTimestamp:      Mon, 09 Aug 2021 22:05:11 -0400
+Labels:                 app=hello-limit
+Annotations:            deployment.kubernetes.io/revision: 1
+Selector:               app=hello-limit
+Replicas:               1 desired | 1 updated | 1 total | 0 available | 1 unavailable
+StrategyType:           RollingUpdate
+MinReadySeconds:        0
+RollingUpdateStrategy:  25% max unavailable, 25% max surge
+Pod Template:
+  Labels:  app=hello-limit
+  Containers:
+   hello-world-nginx:
+    Image:      quay.io/redhattraining/hello-world-nginx:v1.0
+    Port:       <none>
+    Host Port:  <none>
+    Requests:
+      cpu:        3
+      memory:     20Mi
+    Environment:  <none>
+    Mounts:       <none>
+  Volumes:        <none>
+Conditions:
+  Type           Status  Reason
+  ----           ------  ------
+  Available      False   MinimumReplicasUnavailable
+  Progressing    True    ReplicaSetUpdated
+OldReplicaSets:  <none>
+NewReplicaSet:   hello-limit-5cc86ff6b8 (1/1 replicas created)
+Events:
+  Type    Reason             Age   From                   Message
+  ----    ------             ----  ----                   -------
+  Normal  ScalingReplicaSet  37s   deployment-controller  Scaled up replica set hello-limit-5cc86ff6b8 to 1
+[student@workstation ~]$ oc get events --field-selector type=Warning
+LAST SEEN   TYPE      REASON             OBJECT                             MESSAGE
+<unknown>   Warning   FailedScheduling   pod/hello-limit-5cc86ff6b8-42txd   0/3 nodes are available: 3 Insufficient cpu.
+<unknown>   Warning   FailedScheduling   pod/hello-limit-5cc86ff6b8-42txd   0/3 nodes are available: 3 Insufficient cpu.
+[student@workstation ~]$ cat ~/DO280/labs/schedule-limit/hello-limit.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: hello-limit
+  name: hello-limit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hello-limit
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: hello-limit
+    spec:
+      containers:
+      - image: quay.io/redhattraining/hello-world-nginx:v1.0
+        name: hello-world-nginx
+        resources: 
+          requests:
+            cpu: "3"
+            memory: 20Mi
+status: {}
+[student@workstation ~]$ vi ~/DO280/labs/schedule-limit/hello-limit.yaml
+[student@workstation ~]$ grep -i cpu !$
+grep -i cpu ~/DO280/labs/schedule-limit/hello-limit.yaml
+            cpu: "1500m"
+[student@workstation ~]$ oc apply -f ~/DO280/labs/schedule-limit/hello-limit.yaml
+deployment.apps/hello-limit configured
+[student@workstation ~]$ oc get pods
+NAME                         READY   STATUS    RESTARTS   AGE
+hello-limit-d55cd65c-mlthf   1/1     Running   0          8s
+[student@workstation ~]$ oc scale --replicas 4 deployment/hello-limit
+deployment.apps/hello-limit scaled
+[student@workstation ~]$ oc get pods
+NAME                         READY   STATUS    RESTARTS   AGE
+hello-limit-d55cd65c-jlh9m   0/1     Pending   0          22s
+hello-limit-d55cd65c-m5s8c   0/1     Pending   0          22s
+hello-limit-d55cd65c-mlthf   1/1     Running   0          52s
+hello-limit-d55cd65c-vwmmk   0/1     Pending   0          22s
+[student@workstation ~]$ oc get events --field-selector type=Warning
+LAST SEEN   TYPE      REASON             OBJECT                             MESSAGE
+<unknown>   Warning   FailedScheduling   pod/hello-limit-5cc86ff6b8-42txd   0/3 nodes are available: 3 Insufficient cpu.
+<unknown>   Warning   FailedScheduling   pod/hello-limit-5cc86ff6b8-42txd   0/3 nodes are available: 3 Insufficient cpu.
+<unknown>   Warning   FailedScheduling   pod/hello-limit-5cc86ff6b8-42txd   skip schedule deleting pod: schedule-limit/hello-limit-5cc86ff6b8-42txd
+<unknown>   Warning   FailedScheduling   pod/hello-limit-d55cd65c-jlh9m     0/3 nodes are available: 3 Insufficient cpu.
+<unknown>   Warning   FailedScheduling   pod/hello-limit-d55cd65c-jlh9m     0/3 nodes are available: 3 Insufficient cpu.
+<unknown>   Warning   FailedScheduling   pod/hello-limit-d55cd65c-m5s8c     0/3 nodes are available: 3 Insufficient cpu.
+<unknown>   Warning   FailedScheduling   pod/hello-limit-d55cd65c-m5s8c     0/3 nodes are available: 3 Insufficient cpu.
+<unknown>   Warning   FailedScheduling   pod/hello-limit-d55cd65c-vwmmk     0/3 nodes are available: 3 Insufficient cpu.
+<unknown>   Warning   FailedScheduling   pod/hello-limit-d55cd65c-vwmmk     0/3 nodes are available: 3 Insufficient cpu.
+[student@workstation ~]$ oc delete all -l app=hello-limit
+pod "hello-limit-d55cd65c-jlh9m" deleted
+pod "hello-limit-d55cd65c-m5s8c" deleted
+pod "hello-limit-d55cd65c-mlthf" deleted
+pod "hello-limit-d55cd65c-vwmmk" deleted
+deployment.apps "hello-limit" deleted
+replicaset.apps "hello-limit-5cc86ff6b8" deleted
+[student@workstation ~]$ oc create --save-config -f ~/DO280/labs/schedule-limit/loadtest.yaml
+deployment.apps/loadtest created
+service/loadtest created
+route.route.openshift.io/loadtest created
+[student@workstation ~]$ oc get routes
+NAME       HOST/PORT                        PATH   SERVICES   PORT   TERMINATION   WILDCARD
+loadtest   loadtest.apps.ocp4.example.com          loadtest   8080                 None
+[student@workstation ~]$ oc get pods
+NAME                        READY   STATUS    RESTARTS   AGE
+loadtest-58d967ffbb-xkrqt   1/1     Running   0          28s
+[student@workstation ~]$ oc adm top pod
+error: metrics not available yet
+[student@workstation ~]$ oc adm top pod
+NAME                        CPU(cores)   MEMORY(bytes)   
+loadtest-58d967ffbb-xkrqt   0m           21Mi            
+[student@workstation ~]$ curl -X GET http://loadtest.apps.ocp4.example.com/api/loadtest/v1/mem/150/60
+curl: (52) Empty reply from server
+[student@workstation ~]$ oc adm top pod
+NAME                        CPU(cores)   MEMORY(bytes)   
+loadtest-58d967ffbb-xkrqt   0m           173Mi           
+[student@workstation ~]$ oc get pods
+NAME                        READY   STATUS    RESTARTS   AGE
+loadtest-58d967ffbb-xkrqt   1/1     Running   0          3m49s
+[student@workstation ~]$ oc adm top pod
+NAME                        CPU(cores)   MEMORY(bytes)   
+loadtest-58d967ffbb-xkrqt   0m           22Mi            
+[student@workstation ~]$ curl -X GET http://loadtest.apps.ocp4.example.com/api/loadtest/v1/mem/200/60
+<html><body><h1>502 Bad Gateway</h1>
+The server returned an invalid or incomplete response.
+</body></html>
+[student@workstation ~]$ curl -X GET http://loadtest.apps.ocp4.example.com/api/loadtest/v1/mem/200/60
+<html><body><h1>502 Bad Gateway</h1>
+The server returned an invalid or incomplete response.
+</body></html>
+[student@workstation ~]$ oc get pods
+NAME                        READY   STATUS      RESTARTS   AGE
+loadtest-58d967ffbb-xkrqt   0/1     OOMKilled   1          20m
+[student@workstation ~]$ oc adm top pod
+NAME                        CPU(cores)   MEMORY(bytes)   
+loadtest-58d967ffbb-xkrqt   9m           21Mi            
+[student@workstation ~]$ oc get pods
+NAME                        READY   STATUS    RESTARTS   AGE
+loadtest-58d967ffbb-xkrqt   1/1     Running   2          21m
+[student@workstation ~]$ oc delete all -l app=loadtest
+pod "loadtest-58d967ffbb-xkrqt" deleted
+service "loadtest" deleted
+deployment.apps "loadtest" deleted
+replicaset.apps "loadtest-58d967ffbb" deleted
+route.route.openshift.io "loadtest" deleted
+[student@workstation ~]$ oc login -u admin -p redhat
+Login successful.
+
+You have access to 60 projects, the list has been suppressed. You can list all projects with 'oc projects'
+
+Using project "schedule-limit".
+[student@workstation ~]$ oc create quota project-quota --hard cpu="3",memory="1G",configmaps="3" -n schedule-limit
+resourcequota/project-quota created
+[student@workstation ~]$ oc login -u developer -p developer
+Login successful.
+
+You have access to the following projects and can switch between them with 'oc project <projectname>':
+
+    authorization-review
+  * schedule-limit
+
+Using project "schedule-limit".
+[student@workstation ~]$ for X in {1..4};do oc create configmap my-config${X} --from-literal key${X}=value${X};done
+configmap/my-config1 created
+configmap/my-config2 created
+configmap/my-config3 created
+Error from server (Forbidden): configmaps "my-config4" is forbidden: exceeded quota: project-quota, requested: configmaps=1, used: configmaps=3, limited: configmaps=3
+[student@workstation ~]$ oc login -u admin -p redhat
+Login successful.
+
+You have access to 60 projects, the list has been suppressed. You can list all projects with 'oc projects'
+
+Using project "schedule-limit".
+[student@workstation ~]$ oc adm create-bootstrap-project-template -o yaml > /tmp/project-template.yaml
+[student@workstation ~]$ vi /home/student/DO280/labs/schedule-limit/quota-limits.yaml
+[student@workstation ~]$ vi /tmp/project-template.yaml 
+[student@workstation ~]$ cat !$
+cat /tmp/project-template.yaml
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  creationTimestamp: null
+  name: project-request
+objects:
+- apiVersion: project.openshift.io/v1
+  kind: Project
+  metadata:
+    annotations:
+      openshift.io/description: ${PROJECT_DESCRIPTION}
+      openshift.io/display-name: ${PROJECT_DISPLAYNAME}
+      openshift.io/requester: ${PROJECT_REQUESTING_USER}
+    creationTimestamp: null
+    name: ${PROJECT_NAME}
+  spec: {}
+  status: {}
+- apiVersion: rbac.authorization.k8s.io/v1
+  kind: RoleBinding
+  metadata:
+    creationTimestamp: null
+    name: admin
+    namespace: ${PROJECT_NAME}
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: admin
+  subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: ${PROJECT_ADMIN_USER}
+parameters:
+- name: PROJECT_NAME
+- name: PROJECT_DISPLAYNAME
+- name: PROJECT_DESCRIPTION
+- name: PROJECT_ADMIN_USER
+- name: PROJECT_REQUESTING_USER
+[student@workstation ~]$ cat /home/student/DO280/solutions/schedule-limit/project-template.yaml
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  creationTimestamp: null
+  name: project-request
+objects:
+- apiVersion: project.openshift.io/v1
+  kind: Project
+  metadata:
+    annotations:
+      openshift.io/description: ${PROJECT_DESCRIPTION}
+      openshift.io/display-name: ${PROJECT_DISPLAYNAME}
+      openshift.io/requester: ${PROJECT_REQUESTING_USER}
+    creationTimestamp: null
+    name: ${PROJECT_NAME}
+  spec: {}
+  status: {}
+- apiVersion: rbac.authorization.k8s.io/v1
+  kind: RoleBinding
+  metadata:
+    creationTimestamp: null
+    name: admin
+    namespace: ${PROJECT_NAME}
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: admin
+  subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: ${PROJECT_ADMIN_USER}
+- apiVersion: v1
+  kind: ResourceQuota
+  metadata:
+    name: ${PROJECT_NAME}-quota
+  spec:
+    hard:
+      cpu: 3
+      memory: 10G
+- apiVersion: v1
+  kind: LimitRange
+  metadata:
+    name: ${PROJECT_NAME}-limits
+  spec:
+    limits:
+      - type: Container
+        defaultRequest:
+          cpu: 30m
+          memory: 30M
+parameters:
+- name: PROJECT_NAME
+- name: PROJECT_DISPLAYNAME
+- name: PROJECT_DESCRIPTION
+- name: PROJECT_ADMIN_USER
+- name: PROJECT_REQUESTING_USER
+[student@workstation ~]$ cp /home/student/DO280/solutions/schedule-limit/project-template.yaml /tmp/project-template.yaml 
+[student@workstation ~]$ oc create -f /tmp/project-template.yaml -n openshift-config
+template.template.openshift.io/project-request created
+[student@workstation ~]$ oc edit projects.config.openshift.io/cluster
+project.config.openshift.io/cluster edited
+[student@workstation ~]$ oc get pods -n openshift-apiserver
+NAME                         READY   STATUS     RESTARTS   AGE
+apiserver-59b6b7968c-6hvj5   1/1     Running    0          2d18h
+apiserver-59b6b7968c-gsxqg   1/1     Running    0          2d18h
+apiserver-75cfdcf877-r9hwj   0/1     Init:0/1   0          9s
+[student@workstation ~]$ oc get pods -n openshift-apiserver
+NAME                         READY   STATUS        RESTARTS   AGE
+apiserver-59b6b7968c-6hvj5   1/1     Running       0          2d18h
+apiserver-59b6b7968c-gsxqg   1/1     Terminating   0          2d18h
+apiserver-75cfdcf877-7n2cq   0/1     Pending       0          0s
+apiserver-75cfdcf877-r9hwj   1/1     Running       0          16s
+[student@workstation ~]$ oc get pods -n openshift-apiserver
+NAME                         READY   STATUS        RESTARTS   AGE
+apiserver-59b6b7968c-6hvj5   1/1     Running       0          2d18h
+apiserver-59b6b7968c-gsxqg   0/1     Terminating   0          2d18h
+apiserver-75cfdcf877-7n2cq   0/1     Pending       0          6s
+apiserver-75cfdcf877-r9hwj   1/1     Running       0          22s
+[student@workstation ~]$ oc get pods -n openshift-apiserver
+NAME                         READY   STATUS    RESTARTS   AGE
+apiserver-75cfdcf877-4v4z2   0/1     Running   0          10s
+apiserver-75cfdcf877-7n2cq   1/1     Running   0          24s
+apiserver-75cfdcf877-r9hwj   1/1     Running   0          40s
+[student@workstation ~]$ oc new-project template-test
+Now using project "template-test" on server "https://api.ocp4.example.com:6443".
+
+You can add applications to this project with the 'new-app' command. For example, try:
+
+    oc new-app ruby~https://github.com/sclorg/ruby-ex.git
+
+to build a new example application in Ruby. Or use kubectl to deploy a simple Kubernetes application:
+
+    kubectl create deployment hello-node --image=gcr.io/hello-minikube-zero-install/hello-node
+
+[student@workstation ~]$ oc get resourcequotas,limitranges
+NAME                                AGE   REQUEST                   LIMIT
+resourcequota/template-test-quota   10s   cpu: 0/3, memory: 0/10G   
+
+NAME                              CREATED AT
+limitrange/template-test-limits   2021-08-10T02:41:27Z
+[student@workstation ~]$ oc delete project schedule-limit
+project.project.openshift.io "schedule-limit" deleted
+[student@workstation ~]$ oc delete project template-test
+project.project.openshift.io "template-test" deleted
+[student@workstation ~]$ lab schedule-limit finish
+
+Completing Guided Exercise: Limiting Resource Usage by an Application
+
+ · Removing project template 'template.template.openshift.io/pr
+   oject-request'..............................................  SUCCESS
+ · Reverting the cluster to use the default project template...  SUCCESS
+ · Removing /tmp/project-template.yaml.........................  SUCCESS
+ · Remove exercise files.......................................  SUCCESS
+ · Remove solution files.......................................  SUCCESS
+
+Please use start if you wish to do the exercise again.
+
+[student@workstation ~]$ 
 
