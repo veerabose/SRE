@@ -5454,3 +5454,454 @@ Completing Lab: Troubleshoot an OpenShift Cluster and Applications
 Please use start if you wish to do the exercise again.
 
 [student@workstation ~]$ 
+
+
+-------------------------------------------------------------------------------------------------------------------------
+Chapter9 | Comprehensive Review
+Lab: Solition
+Configure a Project Template with Resource and Network Restrictions Page: 313
+
+---------------------------------------------------------------------------------------------------------------------------
+In this review, you will configure the cluster's default project template to ensure that new
+projects enforce default quotas, resource limits, and network policies.
+Outcomes
+You should be able to:
+• Modify the default project template to automatically create limit ranges, resource quotas,
+and network policies.
+• Create a TLS secret using the provided files.
+• Mount a secret as a volume within an application.
+• Create a passthrough route to an application.
+• Configure an application to automatically scale.
+
+[student@workstation ~]$ lab review-template start
+
+Checking prerequisites for Lab: Configure a Project Template with Resource and Network Restrictions
+
+ Verify the OpenShift cluster is running:
+ · Router pods are available...................................  SUCCESS
+ · OAuth pods are available....................................  SUCCESS
+ · API pods are available......................................  SUCCESS
+ · Control plane node 'master01' is ready......................  SUCCESS
+ · Control plane node 'master02' is ready......................  SUCCESS
+ · Control plane node 'master03' is ready......................  SUCCESS
+
+ Checking for conflicts with existing OpenShift projects:
+ · The 'review-template' project is absent.....................  SUCCESS
+
+Setting up the classroom for Lab: Configure a Project Template with Resource and Network Restrictions
+
+ · Create HTPasswd entry for 'admin'...........................  SUCCESS
+ · Create HTPasswd entry for 'leader'..........................  SUCCESS
+ · Create HTPasswd entry for 'developer'.......................  SUCCESS
+ · Create HTPasswd secret: 'localusers'........................  SUCCESS
+ · Add HTPasswd IdP............................................  SUCCESS
+ · Assigning the 'cluster-admin' role to the 'admin' user......  SUCCESS
+ · Pause for creation of first oauth pod.......................  SUCCESS
+ · Pause for creation of second oauth pod......................  SUCCESS
+ · Wait up to 1 minute for 'pod/oauth-openshift-76b8857b44-dgn5
+   v'..........................................................  SUCCESS
+ · Wait up to 1 minute for oauth pod containers to be ready....  SUCCESS
+ · Delete all previous users...................................  SUCCESS
+ · Delete all previous identities..............................  SUCCESS
+ · Pause 5 seconds before validating authentication............  SUCCESS
+ · Validate 'admin' can log in with password 'redhat'..........  SUCCESS
+ · Validate 'leader' can log in with password 'redhat'.........  SUCCESS
+ · Validate 'developer' can log in with password 'developer'...  SUCCESS
+
+ Preparing the student's cluster:
+ · Download exercise files.....................................  SUCCESS
+ · Download solution files.....................................  SUCCESS
+ · Modifying /etc/ansible/ansible.cfg..........................  SUCCESS
+ · Creating /root/.deploy_ansible_files.yml....................  SUCCESS
+ · Running playbook /root/.deploy_ansible_files.yml............  SUCCESS
+ · Creating project 'review-template-test'.....................  SUCCESS
+ · Deploying sample application to 'review-template-test'......  SUCCESS
+ · Adding policy group label to the 'default' namespace........  SUCCESS
+ · Generating Classroom Certificate Authority (CA) files.......  SUCCESS
+ · Generating application TLS certificate files................  SUCCESS
+
+Overall start status...........................................  SUCCESS
+
+[student@workstation ~]$ oc login -u admin -p redhat https://api.ocp4.example.com:6443
+Login successful.
+
+You have access to 62 projects, the list has been suppressed. You can list all projects with 'oc projects'
+
+Using project "default".
+[student@workstation ~]$ oc adm create-bootstrap-project-template -o yaml > ~/DO280/labs/review-template/project-template.yaml
+[student@workstation ~]$ cd ~/DO280/labs/review-template/
+[student@workstation review-template]$ cp ~/DO280/solutions/review-template/project-template.yaml .
+[student@workstation review-template]$ cat project-template.yaml 
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  creationTimestamp: null
+  name: project-request
+objects:
+- apiVersion: project.openshift.io/v1
+  kind: Project
+  metadata:
+    labels:
+      name: ${PROJECT_NAME}
+    annotations:
+      openshift.io/description: ${PROJECT_DESCRIPTION}
+      openshift.io/display-name: ${PROJECT_DISPLAYNAME}
+      openshift.io/requester: ${PROJECT_REQUESTING_USER}
+    creationTimestamp: null
+    name: ${PROJECT_NAME}
+  spec: {}
+  status: {}
+- apiVersion: rbac.authorization.k8s.io/v1
+  kind: RoleBinding
+  metadata:
+    creationTimestamp: null
+    name: admin
+    namespace: ${PROJECT_NAME}
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: admin
+  subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: ${PROJECT_ADMIN_USER}
+- apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    name: allow-from-openshift-ingress
+  spec:
+    podSelector: {}
+    ingress:
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            network.openshift.io/policy-group: ingress
+- apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    name: allow-same-namespace
+  spec:
+    podSelector: {}
+    ingress:
+    - from:
+      - podSelector: {}
+- apiVersion: v1
+  kind: LimitRange
+  metadata:
+    name: project-limitrange
+  spec:
+    limits:
+    - default:
+        memory: 100Mi
+        cpu: 100m
+      defaultRequest:
+        memory: 30Mi
+        cpu: 30m
+      type: Container
+- apiVersion: v1
+  kind: ResourceQuota
+  metadata:
+    name: project-quota
+  spec:
+    hard:
+      pods: '10'
+      requests.cpu: '2'
+      requests.memory: 1Gi
+      limits.cpu: '4'
+      limits.memory: 4Gi
+parameters:
+- name: PROJECT_NAME
+- name: PROJECT_DISPLAYNAME
+- name: PROJECT_DESCRIPTION
+- name: PROJECT_ADMIN_USER
+- name: PROJECT_REQUESTING_USER
+[student@workstation review-template]$ oc create -f project-template.yaml -n openshift-config
+template.template.openshift.io/project-request created
+[student@workstation review-template]$ oc get templates -n openshift-config
+NAME              DESCRIPTION   PARAMETERS    OBJECTS
+project-request                 5 (5 blank)   6
+[student@workstation review-template]$ oc edit projects.config.openshift.io/cluster
+project.config.openshift.io/cluster edited
+[student@workstation review-template]$ oc get pods -n openshift-apiserver
+NAME                         READY   STATUS        RESTARTS   AGE
+apiserver-659d9f8699-mqtdz   0/1     Pending       0          5s
+apiserver-954f8db9c-d4k7v    0/1     Terminating   0          10h
+apiserver-954f8db9c-dtrlt    1/1     Running       0          10h
+apiserver-954f8db9c-n7d7h    1/1     Running       0          10h
+[student@workstation review-template]$ oc get pods -n openshift-apiserver
+NAME                         READY   STATUS        RESTARTS   AGE
+apiserver-659d9f8699-ck4pp   0/1     Pending       0          2s
+apiserver-659d9f8699-mqtdz   1/1     Running       0          22s
+apiserver-954f8db9c-dtrlt    0/1     Terminating   0          10h
+apiserver-954f8db9c-n7d7h    1/1     Running       0          10h
+[student@workstation review-template]$ oc get pods -n openshift-apiserver
+NAME                         READY   STATUS    RESTARTS   AGE
+apiserver-659d9f8699-ck4pp   1/1     Running   0          107s
+apiserver-659d9f8699-mqtdz   1/1     Running   0          2m7s
+apiserver-659d9f8699-nqwq7   1/1     Running   0          90s
+[student@workstation review-template]$ oc login -u developer -p developer
+Login successful.
+
+You have access to the following projects and can switch between them with 'oc project <projectname>':
+
+  * authorization-review
+    schedule-review
+
+Using project "authorization-review".
+[student@workstation review-template]$ oc new-project review-template
+Now using project "review-template" on server "https://api.ocp4.example.com:6443".
+
+You can add applications to this project with the 'new-app' command. For example, try:
+
+    oc new-app ruby~https://github.com/sclorg/ruby-ex.git
+
+to build a new example application in Ruby. Or use kubectl to deploy a simple Kubernetes application:
+
+    kubectl create deployment hello-node --image=gcr.io/hello-minikube-zero-install/hello-node
+
+[student@workstation review-template]$ oc get networkpolicy,limitrange,resourcequota
+NAME                                                           POD-SELECTOR   AGE
+networkpolicy.networking.k8s.io/allow-from-openshift-ingress   <none>         41s
+networkpolicy.networking.k8s.io/allow-same-namespace           <none>         41s
+
+NAME                            CREATED AT
+limitrange/project-limitrange   2021-08-10T13:17:20Z
+
+NAME                          AGE   REQUEST                                                 LIMIT
+resourcequota/project-quota   41s   pods: 0/10, requests.cpu: 0/2, requests.memory: 0/1Gi   limits.cpu: 0/4, limits.memory: 0/4Gi
+[student@workstation review-template]$ oc get project/review-template --show-labels
+NAME              DISPLAY NAME   STATUS   LABELS
+review-template                  Active   name=review-template
+[student@workstation review-template]$ oc new-app --name hello-secure --docker-image quay.io/redhattraining/hello-world-secure:v1.0
+--> Found container image 2a1b082 (10 months old) from quay.io for "quay.io/redhattraining/hello-world-secure:v1.0"
+
+    Red Hat Universal Base Image 8 
+    ------------------------------ 
+    The Universal Base Image is designed and engineered to be the base layer for all of your containerized applications, middleware and utilities. This base image is freely redistributable, but Red Hat only supports Red Hat technologies through subscriptions for Red Hat products. This image is maintained by Red Hat and updated regularly.
+
+    Tags: base rhel8
+
+    * An image stream tag will be created as "hello-secure:v1.0" that will track this image
+
+--> Creating resources ...
+    imagestream.image.openshift.io "hello-secure" created
+    deployment.apps "hello-secure" created
+    service "hello-secure" created
+--> Success
+    Application is not exposed. You can expose services to the outside world by executing one or more of the commands below:
+     'oc expose svc/hello-secure' 
+    Run 'oc status' to view your app.
+[student@workstation review-template]$ oc get pods
+NAME                            READY   STATUS             RESTARTS   AGE
+hello-secure-6475f657c9-rknkv   0/1     CrashLoopBackOff   1          21s
+[student@workstation review-template]$ ls
+hello-secure-combined.pem  hello-secure-key.pem  project-template.yaml  sample-files
+[student@workstation review-template]$ oc create secret tls hello-tls --cert hello-secure-combined.pem --key hello-secure-key.pem
+secret/hello-tls created
+[student@workstation review-template]$ oc get pods
+NAME                            READY   STATUS             RESTARTS   AGE
+hello-secure-6475f657c9-rknkv   0/1     CrashLoopBackOff   3          75s
+[student@workstation review-template]$ oc logs hello-secure-6475f657c9-rknkv
+nginx: [warn] the "user" directive makes sense only if the master process runs with super-user privileges, ignored in /etc/nginx/nginx.conf:5
+nginx: [emerg] BIO_new_file("/run/secrets/nginx/tls.crt") failed (SSL: error:02001002:system library:fopen:No such file or directory:fopen('/run/secrets/nginx/tls.crt','r') error:2006D080:BIO routines:BIO_new_file:no such file)
+[student@workstation review-template]$ oc set volumes deployment/hello-secure --add --type secret --secret-name hello-tls --mount-path /run/secrets/nginx
+info: Generated volume name: volume-wn4v9
+deployment.apps/hello-secure volume updated
+[student@workstation review-template]$ oc get pods
+NAME                            READY   STATUS              RESTARTS   AGE
+hello-secure-54755c69b-9k5cx    0/1     ContainerCreating   0          13s
+hello-secure-6475f657c9-rknkv   0/1     CrashLoopBackOff    4          2m24s
+[student@workstation review-template]$ openssl x509 -in hello-secure-combined.pem -noout -ext 'subjectAltName'
+X509v3 Subject Alternative Name: 
+    DNS:hello-secure.apps.ocp4.example.com
+[student@workstation review-template]$ oc create route passthrough --service hello-secure --hostname hello-secure.apps.ocp4.example.com
+route.route.openshift.io/hello-secure created
+[student@workstation review-template]$ curl -s https://hello-secure.apps.ocp4.example.com | grep Hello
+    <h1>Hello, world from nginx!</h1>
+[student@workstation review-template]$ oc autoscale deployment/hello-secure --min 1 --max 5 --cpu-percent 80
+horizontalpodautoscaler.autoscaling/hello-secure autoscaled
+[student@workstation review-template]$ ~/DO280/solutions/review-template/test-hpa.sh
+
+============================================================
+Waiting up to five minutes for 'hpa/hello-secure': 
+READY
+============================================================
+
+
+This is ApacheBench, Version 2.3 <$Revision: 1843412 $>
+Copyright 1996 Adam Twiss, Zeus Technology Ltd, http://www.zeustech.net/
+Licensed to The Apache Software Foundation, http://www.apache.org/
+
+Benchmarking hello-secure.apps.ocp4.example.com (be patient)
+Completed 10000 requests
+Completed 20000 requests
+Completed 30000 requests
+Completed 40000 requests
+Completed 50000 requests
+Completed 60000 requests
+Completed 70000 requests
+Completed 80000 requests
+Completed 90000 requests
+Completed 100000 requests
+Finished 100000 requests
+
+
+Server Software:        nginx/1.14.1
+Server Hostname:        hello-secure.apps.ocp4.example.com
+Server Port:            443
+SSL/TLS Protocol:       TLSv1.2,ECDHE-RSA-AES256-GCM-SHA384,4096,256
+Server Temp Key:        X25519 253 bits
+TLS Server Name:        hello-secure.apps.ocp4.example.com
+
+Document Path:          /index.html
+Document Length:        72 bytes
+
+Concurrency Level:      200
+Time taken for tests:   94.334 seconds
+Complete requests:      100000
+Failed requests:        0
+Keep-Alive requests:    99080
+Total transferred:      30795400 bytes
+HTML transferred:       7200000 bytes
+Requests per second:    1060.07 [#/sec] (mean)
+Time per request:       188.667 [ms] (mean)
+Time per request:       0.943 [ms] (mean, across all concurrent requests)
+Transfer rate:          318.80 [Kbytes/sec] received
+
+Connection Times (ms)
+              min   avg   max
+Connect:        0    3312646
+Processing:     0   156 1403
+Waiting:        0   156 1403
+Total:          0   18912851
+[student@workstation review-template]$ 
+[student@workstation review-template]$ oc get pods
+NAME                           READY   STATUS    RESTARTS   AGE
+hello-secure-54755c69b-2jn4p   1/1     Running   0          2m8s
+hello-secure-54755c69b-9k5cx   1/1     Running   0          8m14s
+hello-secure-54755c69b-bdssr   1/1     Running   0          2m8s
+hello-secure-54755c69b-tn6dz   1/1     Running   0          2m8s
+[student@workstation review-template]$ lab review-template grade
+
+Grading the student's work for Lab: Configure a Project Template with Resource and Network Restrictions
+
+Deploying resources for grading:
+ · Creating project 'review-template-e3ngo'....................  SUCCESS
+ · Deploying application 'policy-test'.........................  SUCCESS
+ · Creating route to 'policy-test-e3ngo.apps.ocp4.example.com'.  SUCCESS
+ · Scaling application 'policy-test' to two replicas...........  SUCCESS
+ · Waiting up to one minute for 'pod/policy-test-64cbcdcbf-rvhh
+   m' to be ready..............................................  SUCCESS
+
+Testing project template:
+ · New project template exists.................................  PASS
+ · New projects have the default label 'name=PROJECT-NAME'.....  PASS
+ · Default limit range exists..................................  PASS
+ · Default limit range requests '30' MiB memory per container..  PASS
+ · Default limit range limits container memory to '100' MiB....  PASS
+ · Default limit range requests '30m' CPU per container........  PASS
+ · Default limit range limits container CPU to '100m'..........  PASS
+ · Default quota exists........................................  PASS
+ · Default quota set to '10' pods..............................  PASS
+ · Default quota restricts total memory requests to '1' GiB....  PASS
+ · Default quota limits total memory to '4' GiB................  PASS
+ · Default quota restricts total CPU requests to '2'...........  PASS
+ · Default quota limits total CPU to '4'.......................  PASS
+ · Routes respond to external requests.........................  PASS
+ · Pods in the same project can communicate with each other....  PASS
+ · Pods do not respond to requests from pods in a different nam
+   espace......................................................  PASS
+
+Testing project 'review-template':
+ · Project 'review-template' exists............................  PASS
+ · Deployment 'hello-secure' exists............................  PASS
+ · TLS secret exists using provided certificate files..........  PASS
+ · Deployment 'hello-secure' mounts secret as a volume.........  PASS
+ · Deployment 'hello-secure' mounts secret at '/run/secrets/ngi
+   nx'.........................................................  PASS
+ · Passthrough route exists for 'hello-secure.apps.ocp4.example
+   .com'.......................................................  PASS
+ · The 'https://hello-secure.apps.ocp4.example.com' URL respond
+   s to external requests......................................  PASS
+ · Horizontal pod autoscaler exists for 'hello-secure' deployme
+   nt..........................................................  PASS
+ · HPA sets minimum to '1' pod.................................  PASS
+ · HPA sets maximum to '5' pods................................  PASS
+ · HPA scales at '80' percent CPU usage........................  PASS
+ · HPA scales as expected (please be patient)..................  PASS
+
+Cleaning up resources used for grading:
+ · Delete OpenShift project 'review-template-e3ngo'............  SUCCESS
+ · Wait for project 'review-template-e3ngo' to be gone.........  SUCCESS
+
+Overall exercise grade.........................................  PASS
+
+[student@workstation review-template]$ cat ~/DO280/solutions/review-template/test-hpa.sh
+#!/usr/bin/bash
+
+PROJECT="review-template"
+HOSTNAME="hello-secure.apps.ocp4.example.com"
+HPA="hello-secure"
+
+if sudo oc login -u admin -p redhat https://api.ocp4.example.com:6443 --insecure-skip-tls-verify &> /dev/null
+then
+  # Identify if HPA exists
+  if sudo oc get hpa/${HPA} -n ${PROJECT} &> /dev/null
+  then
+    HPA_READY="false"
+    HPA_LOOP_LIMIT=120
+    HPA_LOOP_COUNT=0
+
+    for POD in $(sudo oc get pods -o name -n ${PROJECT} | head -n1)
+    do
+      POD_CPU_REQUEST="$(sudo oc get ${POD} -n ${PROJECT} -o jsonpath='{.spec.containers[?(@.name=="hello-secure")].resources.requests.cpu}')"
+    done
+
+    if [ -n "${POD_CPU_REQUEST}" ]
+    then
+      CURRENT_CPU=$(sudo oc get hpa/${HPA} -n ${PROJECT} -o jsonpath='{.status.currentCPUUtilizationPercentage}')
+      if [ -z "${CURRENT_CPU}" ]
+      then
+        echo
+        echo "============================================================"
+        echo -n "Waiting up to five minutes for 'hpa/${HPA}': "
+
+        while [ ${HPA_LOOP_COUNT} -lt ${HPA_LOOP_LIMIT} ]
+        do
+          CURRENT_CPU=$(sudo oc get hpa/${HPA} -n ${PROJECT} -o jsonpath='{.status.currentCPUUtilizationPercentage}')
+          if [ -n "${CURRENT_CPU}" ]
+          then
+            HPA_READY="true"
+            echo "READY"
+            echo "============================================================"
+            echo
+            break
+          else
+            sleep 5
+            ((HPA_LOOP_COUNT=HPA_LOOP_COUNT+1))
+          fi
+        done
+
+        if [ ${HPA_LOOP_COUNT} -eq ${HPA_LOOP_LIMIT} ]
+        then
+          echo "NOT READY"
+          echo "============================================================"
+        fi
+      else
+        HPA_READY="true"
+      fi
+
+      if [ "${HPA_READY}" == "true" ]
+      then
+        echo
+        ab -c200 -k -dS -n100000 https://${HOSTNAME}/index.html
+      fi
+    else
+      echo
+      echo "ERROR: '${POD}' did not make a CPU request." 1>&2
+      echo
+    fi
+  fi
+fi
+
+[student@workstation review-template]$ 
