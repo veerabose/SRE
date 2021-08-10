@@ -4459,3 +4459,261 @@ Please use start if you wish to do the exercise again.
 
 [student@workstation ~]$ 
 
+----------------------------------------------------------------------------------------------------------------------
+Chapter 6 | Controlling Pod Scheduling
+Guided Exercise
+Scaling an Application Page: 215
+------------------------------------------------------------------------------------------------------------------------
+In this exercise, you will scale an application manually and automatically.
+Outcomes
+You should be able to use the OpenShift command-line interface to:
+• Manually scale an application.
+• Configure an application to automatically scale based on usage.
+
+
+[student@workstation ~]$ lab schedule-scale start
+
+Checking prerequisites for Guided Exercise: Scaling an Application
+
+ Verify the OpenShift cluster is running:
+ · Router pods are available...................................  SUCCESS
+ · OAuth pods are available....................................  SUCCESS
+ · API pods are available......................................  SUCCESS
+ · Control plane node 'master01' is ready......................  SUCCESS
+ · Control plane node 'master02' is ready......................  SUCCESS
+ · Control plane node 'master03' is ready......................  SUCCESS
+
+ Checking for conflicts with existing OpenShift projects:
+ · The 'schedule-scale' project is absent......................  SUCCESS
+
+Setting up the classroom for Guided Exercise: Scaling an Application
+
+ · Validate 'admin' can log in with password 'redhat'..........  SUCCESS
+ · Validate 'leader' can log in with password 'redhat'.........  SUCCESS
+ · Validate 'developer' can log in with password 'developer'...  SUCCESS
+
+ Preparing the student's cluster:
+ · Download exercise files.....................................  SUCCESS
+ · Download solution files.....................................  SUCCESS
+
+Overall start status...........................................  SUCCESS
+
+[student@workstation ~]$ oc login -u developer -p developer https://api.ocp4.example.com:6443
+Login successful.
+
+You have one project on this server: "authorization-review"
+
+Using project "authorization-review".
+[student@workstation ~]$ oc new-project schedule-scale
+Now using project "schedule-scale" on server "https://api.ocp4.example.com:6443".
+
+You can add applications to this project with the 'new-app' command. For example, try:
+
+    oc new-app ruby~https://github.com/sclorg/ruby-ex.git
+
+to build a new example application in Ruby. Or use kubectl to deploy a simple Kubernetes application:
+
+    kubectl create deployment hello-node --image=gcr.io/hello-minikube-zero-install/hello-node
+
+[student@workstation ~]$ ls
+Desktop  DO280  Documents  Downloads  loadtest.yaml  Music  Pictures  Public  Templates  venv  Videos
+[student@workstation ~]$ cp loadtest.yaml ~/DO280/labs/schedule-scale/loadtest.yaml
+[student@workstation ~]$ oc create --save-config -f ~/DO280/labs/schedule-scale/loadtest.yaml
+deployment.apps/loadtest created
+service/loadtest created
+route.route.openshift.io/loadtest created
+[student@workstation ~]$ cat !$
+cat ~/DO280/labs/schedule-scale/loadtest.yaml
+apiVersion: v1
+items:
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    creationTimestamp: null
+    labels:
+      app: loadtest
+    name: loadtest
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        app: loadtest
+    strategy: {}
+    template:
+      metadata:
+        creationTimestamp: null
+        labels:
+          app: loadtest
+      spec:
+        containers:
+        - image: quay.io/redhattraining/loadtest:v1.0
+          name: loadtest
+          resources:
+            requests:
+              cpu: "25m"
+              memory: 25Mi
+            limits:
+              cpu: "100m"
+              memory: 100Mi
+  status: {}
+- apiVersion: v1
+  kind: Service
+  metadata:
+    creationTimestamp: null
+    labels:
+      app: loadtest
+    name: loadtest
+  spec:
+    ports:
+    - port: 80
+      protocol: TCP
+      targetPort: 8080
+    selector:
+      app: loadtest
+  status:
+    loadBalancer: {}
+- apiVersion: route.openshift.io/v1
+  kind: Route
+  metadata:
+    annotations:
+      haproxy.router.openshift.io/timeout: 60s
+    creationTimestamp: null
+    labels:
+      app: loadtest
+    name: loadtest
+  spec:
+    host: ""
+    port:
+      targetPort: 8080
+    subdomain: ""
+    to:
+      kind: ""
+      name: loadtest
+      weight: null
+  status:
+    ingress: null
+kind: List
+metadata: {}
+[student@workstation ~]$ oc get pods
+NAME                        READY   STATUS    RESTARTS   AGE
+loadtest-7c88f9884b-5rgh8   1/1     Running   0          24s
+[student@workstation ~]$ oc describe pod/loadtest-7c88f9884b-5rgh8| grep -A2 -E "Limits|Requests"
+    Limits:
+      cpu:     100m
+      memory:  100Mi
+    Requests:
+      cpu:        25m
+      memory:     25Mi
+[student@workstation ~]$ oc scale --replicas 5 deployment/loadtest
+deployment.apps/loadtest scaled
+[student@workstation ~]$ oc get pods
+NAME                        READY   STATUS    RESTARTS   AGE
+loadtest-7c88f9884b-5mkgp   1/1     Running   0          10s
+loadtest-7c88f9884b-5rgh8   1/1     Running   0          76s
+loadtest-7c88f9884b-cwjnp   1/1     Running   0          10s
+loadtest-7c88f9884b-jkzfm   1/1     Running   0          10s
+loadtest-7c88f9884b-s2t77   1/1     Running   0          10s
+[student@workstation ~]$ oc scale --replicas 1 deployment/loadtest
+deployment.apps/loadtest scaled
+[student@workstation ~]$ oc get pods
+NAME                        READY   STATUS        RESTARTS   AGE
+loadtest-7c88f9884b-5mkgp   1/1     Running       0          30s
+loadtest-7c88f9884b-5rgh8   1/1     Terminating   0          96s
+loadtest-7c88f9884b-cwjnp   1/1     Terminating   0          30s
+loadtest-7c88f9884b-jkzfm   1/1     Terminating   0          30s
+loadtest-7c88f9884b-s2t77   1/1     Terminating   0          30s
+[student@workstation ~]$ oc autoscale deployment/loadtest --min 2 --max 10 --cpu-percent 50
+horizontalpodautoscaler.autoscaling/loadtest autoscaled
+[student@workstation ~]$ oc get hpa/loadtest
+NAME       REFERENCE             TARGETS         MINPODS   MAXPODS   REPLICAS   AGE
+loadtest   Deployment/loadtest   <unknown>/50%   2         10        1          16s
+[student@workstation ~]$ oc get hpa/loadtest
+NAME       REFERENCE             TARGETS         MINPODS   MAXPODS   REPLICAS   AGE
+loadtest   Deployment/loadtest   <unknown>/50%   2         10        1          18s
+[student@workstation ~]$ oc get route/loadtes
+Error from server (NotFound): routes.route.openshift.io "loadtes" not found
+[student@workstation ~]$ oc get route/loadtest
+NAME       HOST/PORT                                       PATH   SERVICES   PORT   TERMINATION   WILDCARD
+loadtest   loadtest-schedule-scale.apps.ocp4.example.com          loadtest   8080                 None
+[student@workstation ~]$ curl -X GET http://loadtest-schedule-scale.apps.ocp4.example.com/api/loadtest/v1/cpu/1
+curl: (52) Empty reply from server
+[student@workstation ~]$ oc get hpa/loadtest
+NAME       REFERENCE             TARGETS         MINPODS   MAXPODS   REPLICAS   AGE
+loadtest   Deployment/loadtest   <unknown>/50%   2         10        2          3m12s
+[student@workstation ~]$ oc new-app --name scaling --as-deployment-config --docker-image quay.io/redhattraining/scaling:v1.0
+--> Found container image 4e17b8d (21 months old) from quay.io for "quay.io/redhattraining/scaling:v1.0"
+
+    Apache 2.4 with PHP 7.2 
+    ----------------------- 
+    PHP 7.2 available as container is a base platform for building and running various PHP 7.2 applications and frameworks. PHP is an HTML-embedded scripting language. PHP attempts to make it easy for developers to write dynamically generated web pages. PHP also offers built-in database integration for several commercial and non-commercial database management systems, so writing a database-enabled webpage with PHP is fairly simple. The most common use of PHP coding is probably as a replacement for CGI scripts.
+
+    Tags: builder, php, php72, rh-php72
+
+    * An image stream tag will be created as "scaling:v1.0" that will track this image
+    * This image will be deployed in deployment config "scaling"
+    * Ports 8080/tcp, 8443/tcp will be load balanced by service "scaling"
+      * Other containers can access this service through the hostname "scaling"
+
+--> Creating resources ...
+    imagestream.image.openshift.io "scaling" created
+    deploymentconfig.apps.openshift.io "scaling" created
+    service "scaling" created
+--> Success
+    Application is not exposed. You can expose services to the outside world by executing one or more of the commands below:
+     'oc expose svc/scaling' 
+    Run 'oc status' to view your app.
+[student@workstation ~]$ oc expose svc/scaling
+route.route.openshift.io/scaling exposed
+[student@workstation ~]$ oc scale --replicas 3 dc/scaling
+deploymentconfig.apps.openshift.io/scaling scaled
+[student@workstation ~]$ oc get pods -o wide -l deploymentconfig=scaling
+NAME              READY   STATUS    RESTARTS   AGE   IP           NODE       NOMINATED NODE   READINESS GATES
+scaling-1-lccbb   1/1     Running   0          17s   10.9.0.25    master03   <none>           <none>
+scaling-1-m6pgb   1/1     Running   0          51s   10.10.0.40   master01   <none>           <none>
+scaling-1-rwctf   1/1     Running   0          17s   10.8.0.38    master02   <none>           <none>
+[student@workstation ~]$ oc get route/scaling
+NAME      HOST/PORT                                      PATH   SERVICES   PORT       TERMINATION   WILDCARD
+scaling   scaling-schedule-scale.apps.ocp4.example.com          scaling    8080-tcp                 None
+[student@workstation ~]$ ~/DO280/labs/schedule-scale/curl-route.sh
+     34 Server IP: 10.10.0.40 
+     34 Server IP: 10.8.0.38 
+     32 Server IP: 10.9.0.25 
+[student@workstation ~]$ ~/DO280/labs/schedule-scale/curl-route.sh
+     34 Server IP: 10.10.0.40 
+     32 Server IP: 10.8.0.38 
+     34 Server IP: 10.9.0.25 
+[student@workstation ~]$ oc get hpa/loadtest
+NAME       REFERENCE             TARGETS   MINPODS   MAXPODS   REPLICAS   AGE
+loadtest   Deployment/loadtest   0%/50%    2         10        8          6m51s
+[student@workstation ~]$ ~/DO280/labs/schedule-scale/curl-route.sh
+     32 Server IP: 10.10.0.40 
+     34 Server IP: 10.8.0.38 
+     34 Server IP: 10.9.0.25 
+[student@workstation ~]$ oc get hpa/loadtest
+NAME       REFERENCE             TARGETS   MINPODS   MAXPODS   REPLICAS   AGE
+loadtest   Deployment/loadtest   0%/50%    2         10        8          7m2s
+[student@workstation ~]$ cat ~/DO280/labs/schedule-scale/curl-route.sh
+#!/usr/bin/bash
+
+if $(oc get route/scaling -n schedule-scale -o jsonpath='{.spec.host}' &> /dev/null); then
+  ROUTE=$(oc get route/scaling -n schedule-scale -o jsonpath='{.spec.host}')
+  (for x in {1..100}; do curl -s http://${ROUTE}; done) | sort | uniq -c
+else
+  echo
+  echo "Error: Ensure that the 'scaling' route exists in the 'schedule-scale'"
+  echo "       namespace and then try running this script again."
+  echo
+fi
+[student@workstation ~]$ oc delete project schedule-scale
+project.project.openshift.io "schedule-scale" deleted
+[student@workstation ~]$ lab schedule-scale finish
+
+Completing Guided Exercise: Scaling an Application
+
+ · Remove exercise files.......................................  SUCCESS
+ · Remove solution files.......................................  SUCCESS
+
+Please use start if you wish to do the exercise again.
+
+[student@workstation ~]$ 
+
