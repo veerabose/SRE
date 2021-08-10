@@ -4900,4 +4900,16 @@ Overall exercise grade.........................................  PASS
 
 [student@workstation ~]$ 
 
+Summary
+In this chapter, you learned:
+• The default pod scheduler uses regions and zones to achieve both performance and
+redundancy.
+• Labeling nodes and using node selectors influences pod placement.
+• Resource requests define the minimum amount of resources a pod needs in order to be
+scheduled.
+• Quotas restrict the amount of resources a project is allowed to consume.
+• A customized project template can automatically create quotas and limit ranges for new
+projects.
+• The oc scale command manually scales the number of replicas of a pod.
+• Horizontal pod autoscalers dynamically scale pod replicas based on load.
 ----------------------------------------------------------------------------------------------------------------------------
